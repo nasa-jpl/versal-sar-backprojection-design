@@ -1,0 +1,14 @@
+build
+**.log
+**/.*.sw*
+**/core.*
+**vitis*
+**/.Xil
+**/.nfs*
+reports_dir
+xpe_dir
+logs
+tags*
+test_data
+design/aie/aiesim_data/*
+design/pl/tb/dma_hls_testbench/*

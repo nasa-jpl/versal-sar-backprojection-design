@@ -1,0 +1,109 @@
+// By: Austin Owens
+// Date: 6/27/2024
+// Desc: Header for class to handle image FFT cross correlation 
+#ifndef IMGFFTCROSSCORR_H
+#define IMGFFTCROSSCORR_H
+
+#include <time.h>
+#include <adf.h>
+#include "xrt/xrt_kernel.h"
+#include "xrt/xrt_graph.h"
+#include "xrt/xrt_aie.h"
+#include "../common.h"
+
+class ImgFFTCrossCorr {
+    private:
+        // Xclbin and map filename
+        const char* m_xclbin_filename;
+        const char* m_map_filename;
+
+        // Number of iterations for AIE kernels to run. The acutal number of
+        // iterations of the AIE kernels will be some multiple of m_iter.
+        const int m_iter;
+
+        // Instances of the design instantiated across the PL and AIE
+        const int m_instances;
+
+        // Device handler and uuid to access acceleration resources
+        xrt::device m_device;
+        xrt::uuid m_uuid;
+
+        // AIE Graphs
+        std::vector<xrt::graph> m_fft_rows_graph_hdls;
+        std::vector<xrt::graph> m_fft_cols_graph_hdls;
+        std::vector<xrt::graph> m_ifft_cols_graph_hdls;
+        std::vector<xrt::graph> m_ifft_rows_graph_hdls;
+        std::vector<xrt::graph> m_cplx_conj_graph_hdls;
+        std::vector<xrt::graph> m_hp_graph_hdls;
+        std::vector<xrt::graph> m_peak_graph_hdls;
+
+    public:
+        // Map vars to contain the original map image and a map image after FFT
+        xrt::aie::bo m_map_buffer;
+        TT_DATA* m_map_array;
+        xrt::aie::bo m_map_fft_buffer;
+        TT_DATA* m_map_fft_array;
+
+    public:
+        // Constructor
+        ImgFFTCrossCorr(const char* xclbin_filename, const char* map_filename, int iter, int instances);
+
+        // Peak search struct
+        struct PeakValue {
+            TT_DATA max;
+            int x;
+            int y;
+        };
+
+        // PUBLIC FUNCTIONS
+        static void startTime();
+        static void endTime();
+        static void printTimeDiff(const char *msg);
+        static void printTotalTime(int curr_iter);
+        static void printAvgTime(int iterations);
+        static void transpose(const TT_DATA* orig_matrix, TT_DATA* new_matrix);
+        void runGraphs();
+        void endGraphs();
+        bool openMapFile();
+        PeakValue createTemplateImg(TT_DATA* array_in);
+        void fft2D(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        void ifft2D(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        void elemMatMult(xrt::aie::bo* buffersA_in, xrt::aie::bo* buffersB_in, 
+                         xrt::aie::bo* buffers_out, int num_of_buffers);
+        void peakSearch(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        PeakValue postPeakSearchOffset(TT_DATA peak_val);
+        void printResults(PeakValue true_peak, PeakValue derived_peak);
+
+        // PUBLIC INSTANCE VARIABLES
+        // Block size of images
+        static constexpr int BLOCK_SIZE_ENTRIES = MAT_ROWS * MAT_COLS;
+        static constexpr int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(TT_DATA);
+
+        // PL dma_hls fft kernel handlers and buffers 
+        std::vector<xrt::kernel> m_dma_hls_fft_kernels;
+        std::vector<xrt::run> m_dma_hls_fft_run_hdls;
+        std::vector<xrt::bo> m_dma_hls_fft_buffers;
+        std::vector<xrt::aie::bo> m_aie_to_pl_buffers;
+
+        // PL dma_hls ifft kernel handlers and buffers 
+        std::vector<xrt::kernel> m_dma_hls_ifft_kernels;
+        std::vector<xrt::run> m_dma_hls_ifft_run_hdls;
+        std::vector<xrt::bo> m_dma_hls_ifft_buffers;
+
+        // Static time metric vars
+        static double total_time;
+        static double total_avg_time;
+        static struct timespec time_start;
+        static struct timespec time_end;
+
+        // Vectors to contain template images to be processed
+        std::vector<xrt::aie::bo> m_tmpl_buffers;
+        std::vector<TT_DATA*> m_tmpl_arrays;
+
+        // Vectors to contain peak values
+        std::vector<xrt::aie::bo> m_peak_buffers;
+        std::vector<TT_DATA*> m_peak_arrays;
+};
+
+#endif // IMGFFTCROSSCORR_H
