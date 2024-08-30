@@ -9,6 +9,7 @@ reports_dir
 xpe_dir
 logs
 tags*
-test_data
+test_data/cfloat*
+test_data/cint16*
 design/aie/aiesim_data/*
 design/pl/tb/dma_hls_testbench/*
