@@ -5,8 +5,8 @@
 SDKTARGETSYSROOT ?= ${SYSROOT}
 OUTPUT_DIR = ${BUILD_DIR}/host
 
-HOST_EXE = img_fft_cross_corr.elf
-HOST_OBJ = ${OUTPUT_DIR}/aie_control_xrt.o ${OUTPUT_DIR}/img_fft_cross_corr.o ${OUTPUT_DIR}/main.o 
+HOST_EXE = sar_backproject.elf
+HOST_OBJ = ${OUTPUT_DIR}/aie_control_xrt.o ${OUTPUT_DIR}/sar_backproject.o ${OUTPUT_DIR}/main.o 
 AIE_CTRL_CPP = ${BUILD_DIR}/Work/ps/c_rts/aie_control_xrt.cpp
 
 
@@ -33,6 +33,7 @@ LDFLAGS += --sysroot=${SDKTARGETSYSROOT} \
 		   -ldl \
 		   -lcrypt \
 		   -lstdc++ \
+		   -lhdf5 \
 		   -fopenmp \
 		   -L${SDKTARGETSYSROOT}/usr/lib/ \
 		   -L$(XILINX_VITIS)/aietools/lib/aarch64.o

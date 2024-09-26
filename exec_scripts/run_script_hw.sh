@@ -21,7 +21,7 @@ export XILINX_XRT=/usr
 #file_path="test_data/${data_type}_simple_mat/mat_${mat_dim}x${mat_dim}.txt"
 #
 ## Run the command with the constructed file path
-#./img_fft_cross_corr_xrt.elf a.xclbin "$file_path" "$file_path"
+#./sar_backproject_xrt.elf a.xclbin "$file_path" "$file_path"
 
 # Check if exactly one argument is provided
 if [ "$#" -ne 1 ]; then
@@ -31,4 +31,4 @@ fi
 
 # Get the data type and matrix dimension from the arguments
 iter=$1
-./img_fft_cross_corr.elf a.xclbin ./test_data/test01_map.hex "$iter"
+./sar_backproject.elf a.xclbin ./test_data/REE_L0B_out17.h5 "$iter"

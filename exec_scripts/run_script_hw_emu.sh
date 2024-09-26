@@ -22,4 +22,4 @@ fi
 file_path="test_data/${data_type}_simple_mat/mat_${mat_dim}x${mat_dim}.txt"
 
 # Run the command with the constructed file path
-./img_fft_cross_corr.elf a.xclbin "$file_path" "$file_path"
+./sar_backproject.elf a.xclbin "$file_path" "$file_path"

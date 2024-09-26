@@ -17,17 +17,21 @@
 // Is an unsigned integer which describes the number of samples in the transform.
 // This must be 2^N where N is an integer in the range 4 to 16 inclusive.
 // When TP_DYN_PT_SIZE is set, TP_POINT_SIZE describes the maximum point size possible.
-#define TP_POINT_SIZE 1024
-#define MAT_ROWS TP_POINT_SIZE
+// NOTE: In practice, I get an error when exceeding 4096 (2^12).
+#define TP_POINT_SIZE 8192
+#define MAT_ROWS 4394
+//#define TP_POINT_SIZE 64
+//#define MAT_ROWS 4
 #define MAT_COLS TP_POINT_SIZE
-#define TMPL_MAT_ROWS TP_POINT_SIZE/8
-#define TMPL_MAT_COLS TP_POINT_SIZE/8
+//#define TMPL_MAT_ROWS TP_POINT_SIZE/8
+//#define TMPL_MAT_COLS TP_POINT_SIZE/8
 
 // Selects whether the transform to perform is an FFT (1) or IFFT (0).
 #define TP_FFT 1
 #define TP_IFFT 0
 
 // Selects the power of 2 to scale the result by prior to output.
+// NOTE: TP_SHIFT is ignored for data type cfloat so must be set to 0
 #define TP_FFT_SHIFT 0
 
 // Selects whether (1) or not (0) to use run-time point size determination.
@@ -63,6 +67,17 @@
 // result, the overheads inferred during kernel triggering are reduced and overall 
 // performance is increased.
 #define TP_FFT_WINDOW_VSIZE TP_POINT_SIZE
+
+// Described whether to use streams (1) or windows (0).
+#define TP_FFT_API 0
+
+// is an unsigned integer to describe N where 2^N is the numbers of subframe processors
+// to use, so as to achieve higher throughput.
+//
+// The default is 0. With TP_PARALLEL_POWER set to 2, 4 subframe processors will be used,
+// each of which takes 2 streams in for a total of 8 streams input and output. Sample[p]
+// must be written to stream[p modulus q] where q is the number of streams.
+#define TP_PARALLEL_POWER 2
 
 #if DATA_TYPE == 0
     // Used for the aiesim to validate data at various stages of the pipeline
@@ -130,17 +145,17 @@
 #define TP_DIM TP_POINT_SIZE
 
 // Describes the number of vectors to be processed in each call to this function.
-#define TP_NUM_FRAMES 4
+#define TP_NUM_FRAMES 1
 
 // Describes power of 2 shift down applied to the accumulation of product terms
 // before each output. TP_SHIFT must be in the range 0 to 61.
 #define TP_HP_SHIFT 0
 
 // Described whether to use streams (1) or windows (0).
-#define TP_API 0
+#define TP_HP_API 0
 
 // Describes the number of kernels to use in parallel.
-#define TP_SSR 2
+#define TP_SSR 8
 
 // Describes the selection of rounding to be applied during the shift down stage of
 // processing. Although, TP_RND accepts unsigned integer values descriptive macros are
