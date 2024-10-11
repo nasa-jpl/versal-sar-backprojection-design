@@ -13,20 +13,18 @@ using namespace adf;
 namespace dsplib = xf::dsp::aie;
 
 extern uint8_t fft_graph_insts;
-//extern uint8_t fft_cols_graph_insts;
 extern uint8_t ifft_graph_insts;
-//extern uint8_t ifft_cols_graph_insts;
 extern uint8_t hp_graph_insts;
 //extern uint8_t cplx_conj_graph_insts;
-//extern uint8_t peak_graph_insts;
 
+template<int FFT_X, int FFT_Y>
 class FFTGraph: public graph
 {
     public:
         //input_gmio gmio_in;
         //output_gmio gmio_out;
-        input_gmio gmio_in[1 << TP_PARALLEL_POWER];
-        output_gmio gmio_out[1 << TP_PARALLEL_POWER];
+        input_gmio gmio_in[FFT_NPORTS];
+        output_gmio gmio_out[FFT_NPORTS];
 
       
         FFTGraph() {
@@ -39,7 +37,8 @@ class FFTGraph: public graph
                                                          TP_DYN_PT_SIZE,
                                                          TP_FFT_WINDOW_VSIZE,
                                                          TP_FFT_API,
-                                                         TP_PARALLEL_POWER> fftGraph;
+                                                         TP_PARALLEL_POWER,
+                                                         TP_USE_WIDGETS> fftGraph;
             //dsplib::fft::mixed_radix_fft::mixed_radix_fft_graph<TT_DATA,
             //                                                    TT_TWIDDLE,
             //                                                    TP_POINT_SIZE,
@@ -58,28 +57,44 @@ class FFTGraph: public graph
 
             //connect< window<FFT_WINDOW_BUFF_SIZE> > (gmio_in.out[0], fftGraph.in[0]);
             //connect< window<FFT_WINDOW_BUFF_SIZE> > (fftGraph.out[0], gmio_out.in[0]);
-            
 
-            for (int i = 0; i < (1 << TP_PARALLEL_POWER); i++) {
+            for (int i = 0; i < FFT_NPORTS; i++) {
                 gmio_in[i] = input_gmio::create("gmio_in_fft_" + std::to_string(fft_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                connect<>(gmio_in[i].out[0],  fftGraph.in[i]);
+                connect< window<FFT_WINDOW_BUFF_SIZE> >(gmio_in[i].out[0],  fftGraph.in[i]);
 
                 gmio_out[i] = output_gmio::create("gmio_out_fft_" + std::to_string(fft_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                connect<>(fftGraph.out[i], gmio_out[i].in[0]);
+                connect< window<FFT_WINDOW_BUFF_SIZE> >(fftGraph.out[i], gmio_out[i].in[0]);
             }
 
+            ////location<kernel>(fftGraph.FFTsubframe0.FFTwinproc.m_inWidgetKernel)  = tile(FFT_X + 8, FFT_Y + 0 );
+            //location<kernel>(fftGraph.FFTsubframe0.FFTwinproc.m_fftKernels[0])   = tile(FFT_X + 7, FFT_Y + 0 );
+            //location<kernel>(fftGraph.FFTsubframe0.FFTwinproc.m_fftKernels[1])   = tile(FFT_X + 6, FFT_Y + 0 );
+            //location<kernel>(fftGraph.FFTsubframe0.FFTwinproc.m_fftKernels[2])   = tile(FFT_X + 5, FFT_Y + 0 );
+            ////location<kernel>(fftGraph.FFTsubframe0.FFTwinproc.m_outWidgetKernel) = tile(FFT_X + 4, FFT_Y + 0 );
+            //location<kernel>(fftGraph.m_combInKernel[0])                         = tile(FFT_X + 3, FFT_Y + 0 );
+            //location<kernel>(fftGraph.m_r2Comb[0])                               = tile(FFT_X + 2, FFT_Y + 0 );
+            //location<kernel>(fftGraph.m_combOutKernel[0])                        = tile(FFT_X + 1, FFT_Y + 0 );
+            ////location<kernel>(fftGraph.FFTsubframe1.FFTwinproc.m_inWidgetKernel)  = tile(FFT_X + 0, FFT_Y + 1 );
+            //location<kernel>(fftGraph.FFTsubframe1.FFTwinproc.m_fftKernels[0])   = tile(FFT_X + 1, FFT_Y + 1 );
+            //location<kernel>(fftGraph.FFTsubframe1.FFTwinproc.m_fftKernels[1])   = tile(FFT_X + 2, FFT_Y + 1 );
+            //location<kernel>(fftGraph.FFTsubframe1.FFTwinproc.m_fftKernels[2])   = tile(FFT_X + 3, FFT_Y + 1 );
+            ////location<kernel>(fftGraph.FFTsubframe1.FFTwinproc.m_outWidgetKernel) = tile(FFT_X + 4, FFT_Y + 1 );
+            //location<kernel>(fftGraph.m_combInKernel[1])                         = tile(FFT_X + 5, FFT_Y + 1 );
+            //location<kernel>(fftGraph.m_r2Comb[1])                               = tile(FFT_X + 6, FFT_Y + 1 );
+            //location<kernel>(fftGraph.m_combOutKernel[1])                        = tile(FFT_X + 7, FFT_Y + 1 );
 
             ++fft_graph_insts;
         }
 };
 
+template<int IFFT_X, int IFFT_Y>
 class IFFTGraph: public graph
 {
     public:
         //input_gmio gmio_in;
         //output_gmio gmio_out;
-        input_gmio gmio_in[1 << TP_PARALLEL_POWER];
-        output_gmio gmio_out[1 << TP_PARALLEL_POWER];
+        input_gmio gmio_in[FFT_NPORTS];
+        output_gmio gmio_out[FFT_NPORTS];
         
         IFFTGraph() {
             dsplib::fft::dit_1ch::fft_ifft_dit_1ch_graph<TT_DATA,
@@ -91,7 +106,8 @@ class IFFTGraph: public graph
                                                          TP_DYN_PT_SIZE,
                                                          TP_FFT_WINDOW_VSIZE,
                                                          TP_FFT_API,
-                                                         TP_PARALLEL_POWER> ifftGraph;
+                                                         TP_PARALLEL_POWER,
+                                                         TP_USE_WIDGETS> ifftGraph;
             //dsplib::fft::mixed_radix_fft::mixed_radix_fft_graph<TT_DATA,
             //                                                    TT_TWIDDLE,
             //                                                    TP_POINT_SIZE,
@@ -111,13 +127,53 @@ class IFFTGraph: public graph
             //connect< window<FFT_WINDOW_BUFF_SIZE> > (gmio_in.out[0], ifftGraph.in[0]);
             //connect< window<FFT_WINDOW_BUFF_SIZE> > (ifftGraph.out[0], gmio_out.in[0]);
 
-            for (int i = 0; i < (1 << TP_PARALLEL_POWER); i++) {
+            for (int i = 0; i < FFT_NPORTS; i++) {
                 gmio_in[i] = input_gmio::create("gmio_in_ifft_" + std::to_string(ifft_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                connect<>(gmio_in[i].out[0],  ifftGraph.in[i]);
+                connect< window<FFT_WINDOW_BUFF_SIZE> >(gmio_in[i].out[0], ifftGraph.in[i]);
 
                 gmio_out[i] = output_gmio::create("gmio_out_ifft_" + std::to_string(ifft_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                connect<>(ifftGraph.out[i], gmio_out[i].in[0]);
+                connect< window<FFT_WINDOW_BUFF_SIZE> >(ifftGraph.out[i], gmio_out[i].in[0]);
             }
+            
+            // Location placement of AIE kernels
+            //for (int lane=0; lane<FFT_NPORTS; lane++) {
+            //    location<kernel>(ifftGraph.m_r2Comb[lane]) = tile(IFFT_X + lane * 2, IFFT_Y + TP_FFT_CASC_LEN + 4);
+            //}
+
+            //for (int lane=0; lane<FFT_NPORTS/2; lane++) {
+            //        location<kernel>(ifftGraph.FFTsubframe0.m_r2Comb[lane]) =
+            //            tile(IFFT_X + lane * 2, IFFT_Y + TP_FFT_CASC_LEN + 3);
+            //        location<kernel>(ifftGraph.FFTsubframe1.m_r2Comb[lane]) =
+            //            tile(IFFT_X + lane * 2 + 16, IFFT_Y + TP_FFT_CASC_LEN + 3);
+            //}
+
+            //for (int lane=0; lane<FFT_NPORTS/4; lane++) {
+            //        location<kernel>(ifftGraph.FFTsubframe0.FFTsubframe0.m_r2Comb[lane]) =
+            //            tile(IFFT_X + lane * 2, IFFT_Y + TP_FFT_CASC_LEN + 2);
+            //        location<kernel>(ifftGraph.FFTsubframe0.FFTsubframe1.m_r2Comb[lane]) =
+            //            tile(IFFT_X + lane * 2 + 8, IFFT_Y + TP_FFT_CASC_LEN + 2);
+            //        location<kernel>(ifftGraph.FFTsubframe1.FFTsubframe0.m_r2Comb[lane]) =
+            //            tile(IFFT_X + lane * 2 + 16, IFFT_Y + TP_FFT_CASC_LEN + 2);
+            //        location<kernel>(ifftGraph.FFTsubframe1.FFTsubframe1.m_r2Comb[lane]) =
+            //            tile(IFFT_X + lane * 2 + 24, IFFT_Y + TP_FFT_CASC_LEN + 2);
+            //}
+
+            ////location<kernel>(ifftGraph.FFTsubframe0.FFTwinproc.m_inWidgetKernel)  = tile(IFFT_X + 8, IFFT_Y + 0 );
+            //location<kernel>(ifftGraph.FFTsubframe0.FFTwinproc.m_fftKernels[0])   = tile(IFFT_X + 7, IFFT_Y + 0 );
+            //location<kernel>(ifftGraph.FFTsubframe0.FFTwinproc.m_fftKernels[1])   = tile(IFFT_X + 6, IFFT_Y + 0 );
+            //location<kernel>(ifftGraph.FFTsubframe0.FFTwinproc.m_fftKernels[2])   = tile(IFFT_X + 5, IFFT_Y + 0 );
+            ////location<kernel>(ifftGraph.FFTsubframe0.FFTwinproc.m_outWidgetKernel) = tile(IFFT_X + 4, IFFT_Y + 0 );
+            //location<kernel>(ifftGraph.m_combInKernel[0])                         = tile(IFFT_X + 3, IFFT_Y + 0 );
+            //location<kernel>(ifftGraph.m_r2Comb[0])                               = tile(IFFT_X + 2, IFFT_Y + 0 );
+            //location<kernel>(ifftGraph.m_combOutKernel[0])                        = tile(IFFT_X + 1, IFFT_Y + 0 );
+            ////location<kernel>(ifftGraph.FFTsubframe1.FFTwinproc.m_inWidgetKernel)  = tile(IFFT_X + 0, IFFT_Y + 1 );
+            //location<kernel>(ifftGraph.FFTsubframe1.FFTwinproc.m_fftKernels[0])   = tile(IFFT_X + 1, IFFT_Y + 1 );
+            //location<kernel>(ifftGraph.FFTsubframe1.FFTwinproc.m_fftKernels[1])   = tile(IFFT_X + 2, IFFT_Y + 1 );
+            //location<kernel>(ifftGraph.FFTsubframe1.FFTwinproc.m_fftKernels[2])   = tile(IFFT_X + 3, IFFT_Y + 1 );
+            ////location<kernel>(ifftGraph.FFTsubframe1.FFTwinproc.m_outWidgetKernel) = tile(IFFT_X + 4, IFFT_Y + 1 );
+            //location<kernel>(ifftGraph.m_combInKernel[1])                         = tile(IFFT_X + 5, IFFT_Y + 1 );
+            //location<kernel>(ifftGraph.m_r2Comb[1])                               = tile(IFFT_X + 6, IFFT_Y + 1 );
+            //location<kernel>(ifftGraph.m_combOutKernel[1])                        = tile(IFFT_X + 7, IFFT_Y + 1 );
     
             ++ifft_graph_insts;
         }
@@ -147,8 +203,8 @@ class HPGraph: public graph
                 gmio_in_A[i] = input_gmio::create("gmio_in_vecA_" + std::to_string(hp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 gmio_in_B[i] = input_gmio::create("gmio_in_vecB_" + std::to_string(hp_graph_insts) + "_" + std::to_string(i), 256, 1000);
 
-                connect<>(gmio_in_A[i].out[0],  hpGraph.inA[i]);
-                connect<>(gmio_in_B[i].out[0],  hpGraph.inB[i]);
+                connect<>(gmio_in_A[i].out[0], hpGraph.inA[i]);
+                connect<>(gmio_in_B[i].out[0], hpGraph.inB[i]);
 
                 gmio_out[i] = output_gmio::create("gmio_out_vec_" + std::to_string(hp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 connect<>(hpGraph.out[i], gmio_out[i].in[0]);

@@ -20,8 +20,10 @@
 // NOTE: In practice, I get an error when exceeding 4096 (2^12).
 #define TP_POINT_SIZE 8192
 #define MAT_ROWS 4394
-//#define TP_POINT_SIZE 64
-//#define MAT_ROWS 4
+//#define TP_POINT_SIZE 8192
+//#define MAT_ROWS 11539
+//#define TP_POINT_SIZE 128
+//#define MAT_ROWS 2
 #define MAT_COLS TP_POINT_SIZE
 //#define TMPL_MAT_ROWS TP_POINT_SIZE/8
 //#define TMPL_MAT_COLS TP_POINT_SIZE/8
@@ -78,6 +80,22 @@
 // each of which takes 2 streams in for a total of 8 streams input and output. Sample[p]
 // must be written to stream[p modulus q] where q is the number of streams.
 #define TP_PARALLEL_POWER 2
+#define FFT_NPORTS (1 << TP_PARALLEL_POWER)
+
+// Use if TP_FFT_API = 1
+//#define FFT_NPORTS (1 << (TP_PARALLEL_POWER+1))
+	
+// is an unsigned integer to control the use of widgets for configurations which either
+// use TP_API=1 or TP_PARALLEL_POWER>0.
+//
+// Designs with streaming IO (TP_API=1) and/or multiple subframe processors 
+// (TP_PARALLEL_POWER>0) will use streams internally, even if not externally.
+//
+// The default is not to use widgets but to have the stream to window conversion
+// performed as part of the FFT kernel or R2combiner kernel. Using widget kernels allows
+// this conversion to be placed in a separate tile and so boost performance at the expense
+// of more tiles being used.
+#define TP_USE_WIDGETS 0
 
 #if DATA_TYPE == 0
     // Used for the aiesim to validate data at various stages of the pipeline
@@ -128,6 +146,11 @@
     #define TP_FFT_CASC_LEN 4
    
 #endif
+
+// COMPLEX CONJUGATE VARIABLES
+//#define CPLX_CONJ_INSTANCES 4
+//#define CPLX_CONJ_POINT_SIZE (TP_POINT_SIZE/CPLX_CONJ_INSTANCES)
+
 
 // HADAMARD PRODUCT VARIABLES
 

@@ -10,6 +10,47 @@
 
 using namespace adf;
 
+void print_arr(TT_DATA* arr, int num_rows, int num_cols, int divisor=1) {
+    for(int r=0; r<num_rows; r++) {
+        for(int c=0; c<num_cols; c++) {
+            int index = (r*MAT_COLS) + c;
+            printf("array[%d][%d] = {%f, %f}\n", r, c, arr[index].real/divisor, arr[index].imag/divisor);
+        }
+    }
+}
+
+int ifftErrorCheck(TT_DATA* data_array) {
+    int error_cnt = 0;
+    float real, imag;
+
+    for(int r = 0; r < MAT_ROWS; r++) {
+        for(int c = 0; c < MAT_COLS; c++) {
+            int index = (r*MAT_COLS)+c;
+            real = data_array[index].real/TP_POINT_SIZE;
+            imag = data_array[index].imag/TP_POINT_SIZE;
+            //printf("IFFT[%d, %d] = {%f, %f}\n", r, c, real, imag);
+
+            if (c == 0) {
+                if(std::abs(real-1.5) > 0.00001 || std::abs(imag+1.5) > 0.00001) {
+                    printf("ERROR IFFT[%d, %d] = {%lf, %lf} | EXPECTED {%f, %f}\n", r, c, real, imag, 1.5, 1.5);
+                    error_cnt++;
+                }
+            }
+            else {
+                if(std::abs(real) > 0.00001 || std::abs(imag) > 0.00001) {
+                    printf("ERROR IFFT[%d, %d] = {%lf, %lf} | EXPECTED {%d, %d}\n", r, c, real, imag, 0, 0);
+                    error_cnt++;
+                }
+
+            }
+        }
+    }
+
+    printf("IFFT ERRORS: %d\n\n", error_cnt);
+
+    return error_cnt;
+}
+
 int main(int argc, char ** argv) {
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0] << " <xclbin file> <hdf5 file> <iteration>" << std::endl;
@@ -31,21 +72,14 @@ int main(int argc, char ** argv) {
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Init completed (HOST)");
 
-    std::cout << "\nReading range data from file (HOST)..." << std::endl;
+    std::cout << "\nPopulating data buffers (HOST)..." << std::endl;
     SARBackproject::startTime();
-    if(!ifcc.openHDF5File()) {
+    if(!ifcc.fetchRadarData()) {
         return -1;
     }
     SARBackproject::endTime();
-    SARBackproject::printTimeDiff("Read range data completed (HOST)");
+    SARBackproject::printTimeDiff("Populating data buffers completed (HOST)");
 
-    // Run all AIE kernels for specific number of iterations
-    std::cout << "\nRun AIE graphs (HOST)... " << std::endl;
-    SARBackproject::startTime();
-    ifcc.runGraphs();
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("Run AIE graphs completed (HOST)");
-    
     // Initialize generic xrt::aie::bo buffer arrays 
     xrt::aie::bo buffers_in[INSTANCES];
     xrt::aie::bo buffers_out[INSTANCES];
@@ -55,10 +89,10 @@ int main(int argc, char ** argv) {
     xrt::aie::bo buffersB_in[INSTANCES];
 
     // Buffer number for telling AIE kernels how many buffers to operate on in parallel
-    int buff_num;
+    int buff_num = 1;
 
     std::cout << "\nFFT on range data (AIE)..." << std::endl;
-    buff_num = 1;
+    ifcc.reshapeMatrix(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
     buffers_in[0] = ifcc.m_range_data_buffer;
     buffers_out[0] = ifcc.m_range_data_buffer;
     SARBackproject::startTime();
@@ -66,26 +100,25 @@ int main(int argc, char ** argv) {
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("FFT on range data completed (AIE)");
 
-    //TODO: TEMPORARY
-    for(int r=0; r<5; r++) {
-        for(int c=0; c<5; c++) {
-            int index = (r*MAT_COLS) + c;
-            printf("ifcc.m_range_data_array[%d][%d] = {%f, %f}\n", r, c, ifcc.m_range_data_array[index].real, ifcc.m_range_data_array[index].imag);
-        }
-    }
+    //TODO: DEBUG
+    print_arr(ifcc.m_range_data_array, 5, 5);
+    ifcc.strideCols(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
+    print_arr(ifcc.m_range_data_array, 5, 5);
+    ifcc.strideCols(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS, true);
+    print_arr(ifcc.m_range_data_array, 5, 5);
 
     //std::cout << "\nComplex conjugate on range data (AIE)..." << std::endl;
-    //buff_num = INSTANCES;
-    //for (int i = 0; i < buff_num; i++) {
-    //    buffers_in[i] = ifcc.m_tmpl_buffers[i];
-    //    buffers_out[i] = ifcc.m_tmpl_buffers[i];
-    //}
+    //buffers_in[0] = ifcc.m_range_data_buffer;
+    //buffers_out[0] = ifcc.m_range_data_buffer;
     //SARBackproject::startTime();
     //ifcc.cplxConj(buffers_in, buffers_out, buff_num);
     //SARBackproject::endTime();
     //SARBackproject::printTimeDiff("Complex conjugate completed (AIE)");
 
-    std::cout << "\nElement-wise matrix multiply (AIE)..." << std::endl;
+    ////TODO: DEBUG
+    //print_arr(ifcc.m_range_data_array, 5, 5);
+
+    std::cout << "\nElement-wise matrix multiply between ref function and range data (AIE)..." << std::endl;
     buffersA_in[0] = ifcc.m_ref_func_range_comp_buffer;
     buffersB_in[0] = ifcc.m_range_data_buffer;
     buffers_out[0] = ifcc.m_range_data_buffer;
@@ -94,13 +127,8 @@ int main(int argc, char ** argv) {
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Element-wise matrix multiply completed (AIE)");
 
-    //TODO: TEMPORARY
-    for(int r=0; r<5; r++) {
-        for(int c=0; c<5; c++) {
-            int index = (r*MAT_COLS) + c;
-            printf("ifcc.m_range_data_array[%d][%d] = {%f, %f}\n", r, c, ifcc.m_range_data_array[index].real, ifcc.m_range_data_array[index].imag);
-        }
-    }
+    //TODO: DEBUG
+    print_arr(ifcc.m_range_data_array, 5, 5);
 
     std::cout << "\niFFT on range data (AIE)..." << std::endl;
     buffers_in[0] = ifcc.m_range_data_buffer;
@@ -110,13 +138,9 @@ int main(int argc, char ** argv) {
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("iFFT on range data completed (AIE)");
 
-    //TODO: TEMPORARY
-    for(int r=0; r<5; r++) {
-        for(int c=0; c<5; c++) {
-            int index = (r*MAT_COLS) + c;
-            printf("ifcc.m_range_data_array[%d][%d] = {%f, %f}\n", r, c, ifcc.m_range_data_array[index].real/TP_POINT_SIZE, ifcc.m_range_data_array[index].imag/TP_POINT_SIZE);
-        }
-    }
+    //TODO: DEBUG
+    print_arr(ifcc.m_range_data_array, 5, 5, TP_POINT_SIZE);
+    //ifftErrorCheck(ifcc.m_range_data_array);
 
     //for(int n=0; n<iter; n++) {
     //    std::cout << "\n# ITERATION " << n+1 << ": ";
@@ -211,8 +235,6 @@ int main(int argc, char ** argv) {
     //}
 
     //SARBackproject::printAvgTime(iter);
-    
-    ifcc.endGraphs();
 
     return 0;
 };

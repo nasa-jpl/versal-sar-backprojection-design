@@ -16,27 +16,19 @@
 
 uint8_t fft_graph_insts = 0;
 uint8_t ifft_graph_insts = 0;
-//uint8_t fft_cols_graph_insts = 0;
-//uint8_t ifft_cols_graph_insts = 0;
-//uint8_t ifft_rows_graph_insts = 0;
 //uint8_t cplx_conj_graph_insts = 0;
 uint8_t hp_graph_insts = 0;
-//uint8_t peak_graph_insts = 0;
 
 const int INSTANCES = 1;
-const float EPSILON = 0.0001;
-FFTGraph fftGraph[INSTANCES];
-IFFTGraph ifftGraph[INSTANCES];
-//FFTColsGraph fftColsGraph[INSTANCES];
-//IFFTColsGraph ifftColsGraph[INSTANCES];
-//IFFTRowsGraph ifftRowsGraph[INSTANCES];
-//CplxConjGraph cplxConjGraph[INSTANCES];
+FFTGraph<0,0> fftGraph[INSTANCES];
+IFFTGraph<0,2> ifftGraph[INSTANCES];
+//CplxConjGraph cplxConjGraph[CPLX_CONJ_INSTANCES*INSTANCES];
 HPGraph hpGraph[INSTANCES];
-//PeakGraph peakGraph[INSTANCES];
 
 #if defined(__AIESIM__) || defined(__X86SIM__)
 
-const int BLOCK_SIZE_ENTRIES = MAT_ROWS * MAT_COLS;
+const float EPSILON = 0.0001;
+const int BLOCK_SIZE_ENTRIES = MAT_ROWS*MAT_COLS;
 const int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(TT_DATA);
 
 // FFT output should all be FFT_SAMPLE_DATA for both real and imaginary
@@ -73,7 +65,8 @@ int ifftErrorCheck(TT_DATA* data_array, TT_DATA* gold_data_array) {
             real = data_array[index].real/TP_POINT_SIZE;
             imag = data_array[index].imag/TP_POINT_SIZE;
             gold_real = gold_data_array[index].real;
-            gold_imag = gold_data_array[index].imag;
+            //gold_imag = -gold_data_array[index].imag; // Adding negative to accommodate for complx conjugation
+            gold_imag = gold_data_array[index].imag; // Adding negative to accommodate for complx conjugation
             //printf("IFFT[%d, %d] = {%f, %f}\n", r, c, real, imag);
 
             if(std::abs(real-gold_real) > EPSILON || std::abs(imag-gold_imag) > EPSILON) {
@@ -88,6 +81,14 @@ int ifftErrorCheck(TT_DATA* data_array, TT_DATA* gold_data_array) {
     return error_cnt;
 }
 
+void print_arr(TT_DATA* arr, int num_rows, int num_cols) {
+    for(int r=0; r<num_rows; r++) {
+        for(int c=0; c<num_cols; c++) {
+            int index = (r*MAT_COLS) + c;
+            printf("array[%d][%d] = {%f, %f}\n", r, c, arr[index].real, arr[index].imag);
+        }
+    }
+}
 
 void reorderDataArray(TT_DATA* data_array) {
     // Create a temporary array to hold the rearranged data
@@ -126,7 +127,7 @@ void reorderDataArray(TT_DATA* data_array) {
 int main(int argc, char ** argv) {
 
     // Number of iterations to run
-    const int ITER = 1;
+    const int ITER = 2;
 
     // Generate random seed
     std::time_t seed = std::time(0);
@@ -139,20 +140,26 @@ int main(int argc, char ** argv) {
     // Initialize all AIE graphs
     for(int inst=0; inst<INSTANCES; inst++) {
         fftGraph[inst].init();
-        //cplxConjGraph[inst].init();
         hpGraph[inst].init();
         ifftGraph[inst].init();
     }
+    //for(int inst=0; inst<CPLX_CONJ_INSTANCES*INSTANCES; inst++) {
+    //    cplxConjGraph[inst].init();
+    //}
    
-    // Populating inital sample data
+    // Allocating memory
     TT_DATA* gold_data_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
-    TT_DATA* data_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
+    std::vector<TT_DATA*> data_arrays;
+    for(int inst=0; inst<INSTANCES; inst++) {
+        data_arrays.push_back((TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES));
+    }
     TT_DATA* one_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
 
+    // Populating inital sample data
     for(int r = 0; r < MAT_ROWS; r++) {
         for(int c = 0; c < MAT_COLS; c++) {
             int index = (r*MAT_COLS)+c;
-            if (c == 0) {
+            if (c == 1) {
                 gold_data_array[index] = (TT_DATA) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
             }
             else {
@@ -170,87 +177,123 @@ int main(int argc, char ** argv) {
     //}
     
     // Number of iteration for the AIE graphs to run
-    fftGraph[0].run(MAT_ROWS*ITER);
-    //cplxConjGraph[0].run(MAT_ROWS*ITER);
-    hpGraph[0].run((MAT_ROWS/TP_NUM_FRAMES)*ITER);
-    ifftGraph[0].run(MAT_ROWS*ITER);
+    for (int inst = 0; inst < INSTANCES; inst++) {
+        fftGraph[inst].run();
+        hpGraph[inst].run();
+        ifftGraph[inst].run();
+    }
+    //for (int inst = 0; inst < INSTANCES; inst++) {
+    //    fftGraph[inst].run(MAT_ROWS*ITER);
+    //    hpGraph[inst].run((MAT_ROWS/TP_NUM_FRAMES)*ITER);
+    //    ifftGraph[inst].run(MAT_ROWS*ITER);
+    //}
 
-    int fft_per_ssr_byte_size = BLOCK_SIZE_BYTES / (1<<TP_PARALLEL_POWER);
-    int fft_per_ssr_entry_size = BLOCK_SIZE_ENTRIES / (1<<TP_PARALLEL_POWER);
+    //for (int inst = 0; inst < CPLX_CONJ_INSTANCES*INSTANCES; inst++) {
+    //    cplxConjGraph[inst].run(MAT_ROWS*ITER);
+    //}
 
-    for(int r = 0; r < 2; r++) {
-        for(int c = 0; c < 5; c++) {
-            int index = (r*MAT_COLS)+c;
-            printf("%d: {%f, %f}\n", index, gold_data_array[index].real, gold_data_array[index].imag);
+    int fft_per_ssr_entry_size = MAT_COLS / FFT_NPORTS;
+    int fft_per_ssr_byte_size = fft_per_ssr_entry_size * sizeof(TT_DATA);
+
+    //TODO: DEBUG
+    print_arr(gold_data_array, 2, 5);
+   
+    // Loop through pipeline ITER times
+    for(int iter=0; iter<ITER; iter++) {
+        for(int inst=0; inst<INSTANCES; inst++) {
+            printf("\nPERFORM FFT (ITER = %d) (INST = %d)\n", iter, inst);
+
+            // Set up AIE graph to run MAT_ROWS times
+            fftGraph[inst].run(MAT_ROWS);
+
+            // Pass in data to AIE
+            for(int row=0; row<MAT_ROWS; row++) {
+                for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+                    fftGraph[inst].gmio_in[ssr].gm2aie_nb(gold_data_array + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+                    fftGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+                }
+            }
+        }
+
+        // Block until AIE finishes
+        for(int inst=0; inst<INSTANCES; inst++) {
+            for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+                fftGraph[inst].gmio_out[ssr].wait();
+            }
+            //TODO: DEBUG
+            print_arr(data_arrays[inst], MAT_ROWS, MAT_COLS);
+        }
+
+        //std::cout << "\nPERFORM COMPLEX CONJUGATE" << std::endl;
+        //for(int inst=0; inst<CPLX_CONJ_INSTANCES; inst++) {
+        //    cplxConjGraph[inst].gmio_in.gm2aie_nb(data_array+inst*CPLX_CONJ_POINT_SIZE, BLOCK_SIZE_BYTES/CPLX_CONJ_INSTANCES);
+        //    cplxConjGraph[inst].gmio_out.aie2gm_nb(data_array+inst*CPLX_CONJ_POINT_SIZE, BLOCK_SIZE_BYTES/CPLX_CONJ_INSTANCES);
+        //}
+
+        //// Block until AIE finishes
+        //for(int inst=0; inst<CPLX_CONJ_INSTANCES; inst++) {
+        //    cplxConjGraph[inst].gmio_out.wait();
+        //}
+
+        ////TODO: DEBUG
+        //print_arr(data_array, 2, MAT_COLS);
+
+        int hp_per_ssr_byte_size = BLOCK_SIZE_BYTES / TP_SSR;
+        int hp_per_ssr_entry_size = BLOCK_SIZE_ENTRIES / TP_SSR;
+        for(int r = 0; r < MAT_ROWS; r++) {
+            for(int c = 0; c < MAT_COLS; c++) {
+                int index = (r*MAT_COLS)+c;
+                one_array[index] = (TT_DATA) {1, 0};
+            }
+        }
+        for(int inst=0; inst<INSTANCES; inst++) {
+            printf("\nPERFORM ELEMENT-WISE MATRIX MULTIPLY (ITER = %d) (INST = %d)\n", iter, inst);
+            hpGraph[inst].run(MAT_ROWS/TP_NUM_FRAMES);
+            for(int ssr=0; ssr<TP_SSR; ssr++) {
+                hpGraph[inst].gmio_in_A[ssr].gm2aie_nb(one_array+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
+                hpGraph[inst].gmio_in_B[ssr].gm2aie_nb(data_arrays[inst]+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
+                hpGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst]+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
+            }
+        }
+
+        // Block until AIE finishes
+        for(int inst=0; inst<INSTANCES; inst++) {
+            for(int ssr=0; ssr<TP_SSR; ssr++) {
+                hpGraph[inst].gmio_out[ssr].wait();
+            }
+            //TODO: DEBUG
+            print_arr(data_arrays[inst], MAT_ROWS, MAT_COLS);
+        }
+
+        for(int inst=0; inst<INSTANCES; inst++) {
+            printf("\nPERFORM IFFT (ITER = %d) (INST = %d)\n", iter, inst);
+            ifftGraph[inst].run(MAT_ROWS);
+            for(int row=0; row<MAT_ROWS; row++) {
+                for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+                    ifftGraph[inst].gmio_in[ssr].gm2aie_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+                    ifftGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+                }
+            }
+        }
+
+        // Block until AIE finishes
+        for(int inst=0; inst<INSTANCES; inst++) {
+            for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+                ifftGraph[inst].gmio_out[ssr].wait();
+            }
+            total_err_cnt+=ifftErrorCheck(data_arrays[inst], gold_data_array);
         }
     }
 
-    std::cout << "\nPERFORM FFT" << std::endl;
-    for(int inst=0; inst<INSTANCES; inst++) {
-        for(int ssr=0; ssr<(1<<TP_PARALLEL_POWER); ssr++) {
-            fftGraph[inst].gmio_in[ssr].gm2aie_nb(gold_data_array+ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-            fftGraph[inst].gmio_out[ssr].aie2gm_nb(data_array+ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-        }
-    }
-
-    // Block until AIE finishes
-    for(int inst=0; inst<INSTANCES; inst++) {
-        for(int ssr=0; ssr<(1<<TP_PARALLEL_POWER); ssr++) {
-            fftGraph[inst].gmio_out[ssr].wait();
-        }
-    }
-    for(int r = 0; r < 2; r++) {
-        for(int c = 0; c < 5; c++) {
-            int index = (r*MAT_COLS)+c;
-            printf("%d: {%f, %f}\n", index, data_array[index].real, data_array[index].imag);
-        }
-    }
-
-    std::cout << "\nPERFORM ELEMENT-WISE MATRIX MULTIPLY" << std::endl;
-    int hp_per_ssr_byte_size = BLOCK_SIZE_BYTES / TP_SSR;
-    int hp_per_ssr_entry_size = BLOCK_SIZE_ENTRIES / TP_SSR;
-    for(int r = 0; r < MAT_ROWS; r++) {
-        for(int c = 0; c < MAT_COLS; c++) {
-            int index = (r*MAT_COLS)+c;
-            one_array[index] = (TT_DATA) {1, 0};
-        }
-    }
-    for(int inst=0; inst<INSTANCES; inst++) {
-        for(int ssr=0; ssr<TP_SSR; ssr++) {
-            hpGraph[inst].gmio_in_A[ssr].gm2aie_nb(one_array+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
-            hpGraph[inst].gmio_in_B[ssr].gm2aie_nb(data_array+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
-            hpGraph[inst].gmio_out[ssr].aie2gm_nb(data_array+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
-        }
-    }
-
-    // Block until AIE finishes
-    for(int inst=0; inst<INSTANCES; inst++) {
-        for(int ssr=0; ssr<TP_SSR; ssr++) {
-            hpGraph[inst].gmio_out[ssr].wait();
-        }
-    }
-    for(int r = 0; r < 2; r++) {
-        for(int c = 0; c < 5; c++) {
-            int index = (r*MAT_COLS)+c;
-            printf("%d: {%f, %f}\n", index, data_array[index].real, data_array[index].imag);
-        }
-    }
-
-    std::cout << "\nPERFORM IFFT" << std::endl;
-    for(int inst=0; inst<INSTANCES; inst++) {
-        for(int ssr=0; ssr<(1<<TP_PARALLEL_POWER); ssr++) {
-            ifftGraph[inst].gmio_in[ssr].gm2aie_nb(data_array+ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-            ifftGraph[inst].gmio_out[ssr].aie2gm_nb(data_array+ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-        }
-    }
-
-   // Block until AIE finishes
-   for(int inst=0; inst<INSTANCES; inst++) {
-       for(int ssr=0; ssr<(1<<TP_PARALLEL_POWER); ssr++) {
-           ifftGraph[inst].gmio_out[ssr].wait();
-       }
-       total_err_cnt+=ifftErrorCheck(data_array, gold_data_array);
-   }
+    // End AIE graphs
+    //for(int inst=0; inst<INSTANCES; inst++) {
+    //    fftGraph[inst].end();
+    //    ifftGraph[inst].end();
+    //    hpGraph[inst].end();
+    //}
+    //for(int inst=0; inst<CPLX_CONJ_INSTANCES*INSTANCES; inst++) {
+    //    cplxConjGraph[inst].end();
+    //}
 
     return total_err_cnt;
 }

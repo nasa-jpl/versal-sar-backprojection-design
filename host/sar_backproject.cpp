@@ -103,6 +103,74 @@ void SARBackproject::printAvgTime(int iterations) {
     }
 }
 
+void SARBackproject::reshapeMatrix(TT_DATA* input, int rows, int cols, int segment, bool reverse) {
+    // Malloc tmp array 
+    TT_DATA* tmp = (TT_DATA*) malloc(rows*cols*sizeof(TT_DATA));
+
+    // Determine size of column segment
+    int entry_seg = cols / segment;
+
+    if (!reverse) {
+        // Loop through each entry_seg
+        for (int q = 0; q < segment; q++) {
+            // Loop through each row
+            for (int r = 0; r < rows; r++) {
+                // Copy the corresponding part of each row into the tmp array
+                memcpy(tmp + r * entry_seg + q * rows * entry_seg,
+                       input + r * cols + q * entry_seg,
+                       entry_seg * sizeof(TT_DATA));
+            }
+        }
+    } else {
+        for (int q = 0; q < 4; q++) {
+            for (int r = 0; r < rows; r++) {
+                memcpy(tmp + r * cols + q * entry_seg, 
+                       input + r * entry_seg + q * rows * entry_seg, 
+                       entry_seg * sizeof(TT_DATA));
+            }
+        }
+
+    }
+
+    // Copy the tmp array back into input
+    memcpy(input, tmp, rows*cols*sizeof(TT_DATA));
+    free(tmp);
+}
+
+void SARBackproject::strideCols(TT_DATA* input, int rows, int cols, int n, bool reverse) {
+    // Allocate temporary array for rearranging
+    TT_DATA* tmp = (TT_DATA*) malloc(rows*cols*sizeof(TT_DATA));
+    
+    // Rearrange (either forward or reverse)
+    if (!reverse) {
+        for (int r = 0; r < rows; r++) {
+            int offset = r * cols;
+
+            for (int c = 0; c < cols; c++) {
+                int new_index = offset + (c / 4) + (c % 4) * (cols / 4);
+
+                tmp[new_index] = input[offset + c];  // Forward rearrangement
+            }
+        }
+    } else {
+        for (int r = 0; r < rows; r++) {
+            int offset = r * cols;
+
+            for (int c = 0; c < cols; c++) {
+                int new_index = offset + (c / 4) + (c % 4) * (cols / 4);
+
+                tmp[offset + c] = input[new_index];  // Reverse rearrangement
+            }
+        }
+    }
+
+    // Copy rearranged data back into the original input array
+    memcpy(input, tmp, rows*cols*sizeof(TT_DATA));
+
+    // Free the temporary array
+    free(tmp);
+}
+
 bool SARBackproject::readCplxDataset(hid_t file, const std::string& dataset_name, std::vector<TT_DATA>& data) {
 
     // Open the dataset
@@ -163,25 +231,7 @@ bool SARBackproject::readFloatDataset(hid_t file, const std::string& dataset_nam
     return true;
 }
 
-void SARBackproject::runGraphs() {
-    for(int i = 0; i < this->m_instances; i++) {
-        this->m_fft_graph_hdls[i].run(MAT_ROWS*this->m_iter);
-        this->m_ifft_graph_hdls[i].run(MAT_ROWS*this->m_iter);
-        //this->m_cplx_conj_graph_hdls[i].run(MAT_ROWS*this->m_iter);
-        this->m_hp_graph_hdls[i].run((MAT_ROWS/TP_NUM_FRAMES)*this->m_iter);
-    }
-}
-
-void SARBackproject::endGraphs() {
-    for(int i = 0; i < this->m_instances; i++) {
-        this->m_fft_graph_hdls[i].end();
-        this->m_ifft_graph_hdls[i].end();
-        //this->m_cplx_conj_graph_hdls[i].end();
-        this->m_hp_graph_hdls[i].end();
-    }
-}
-
-bool SARBackproject::openHDF5File() {
+bool SARBackproject::fetchRadarData() {
 
     std::vector<TT_DATA> hh;
     std::vector<float> lut;
@@ -195,8 +245,21 @@ bool SARBackproject::openHDF5File() {
     readCplxDataset(file, "science/LSAR/RRSD/swaths/frequencyA/txH/rxH/HH", hh);
     readFloatDataset(file, "science/LSAR/RRSD/swaths/frequencyA/txH/rxH/BFPQLUT", lut);
     
-    for (int i=0; i<BLOCK_SIZE_ENTRIES; i++) {
-        this->m_range_data_array[i] = (TT_DATA) {lut[hh[i].real], lut[hh[i].imag]};
+    //for (int i=0; i<BLOCK_SIZE_ENTRIES; i++) {
+    //    this->m_range_data_array[i] = (TT_DATA) {lut[hh[i].real], lut[hh[i].imag]};
+    //}
+
+    //TODO: DEBUG
+    for(int r = 0; r < MAT_ROWS; r++) {
+        for(int c = 0; c < MAT_COLS; c++) {
+            int index = (r*MAT_COLS)+c;
+            if (c == 1) {
+                this->m_range_data_array[index] = (TT_DATA) {1.5, 1.5};
+            }
+            else {
+                this->m_range_data_array[index] = (TT_DATA) {0, 0};
+            }
+        }
     }
 
     for(int r=0; r<5; r++) {
@@ -214,210 +277,168 @@ bool SARBackproject::openHDF5File() {
         }
     }
 
-
     return true;
 }
 
 void SARBackproject::fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers) {
 
     std::vector<xrt::bo::async_handle> buff_async_hdls;
-    int ssr = (1 << TP_PARALLEL_POWER);
-    int per_ssr_byte_size = BLOCK_SIZE_BYTES / ssr;
 
-    //////////////////////TODO: TESTING...REMOVE WHEN DONE///////////////////////////// 
-    //// Create a temporary array to hold the rearranged data
-    //TT_DATA *temp = (TT_DATA *)malloc(BLOCK_SIZE_BYTES);
-    //
-    //// Rearrange the data into the temp array
-    //int chunk_size = MAT_COLS;
-    //int num_datasets = BLOCK_SIZE_ENTRIES / chunk_size;
+    // 587 MS TO COMPLETE
+    //int per_row_byte_size = MAT_COLS * sizeof(TT_DATA);
+    //int per_ssr_byte_size = (MAT_COLS / FFT_NPORTS) * sizeof(TT_DATA);
+    //int byte_offset = 0;
 
-    //for (int dataset = 0; dataset < num_datasets; dataset++) {
-    //    int offset = dataset * chunk_size;
+    //for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+    //    for (int row = 0; row < MAT_ROWS; row++) {
+    //        for (int ssr = 0; ssr < FFT_NPORTS; ssr++) {
+    //            byte_offset = row*per_row_byte_size + ssr*per_ssr_byte_size;
+    //            buffers_in[buff_idx].async("fftGraph[" + std::to_string(buff_idx) + "].gmio_in[" + std::to_string(ssr) + "]", 
+    //                                       XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+    //                                       per_ssr_byte_size, 
+    //                                       byte_offset);
 
-    //    for (int i = 0; i < chunk_size; i++) {
-    //        int new_index = offset + (i / 4) + (i % 4) * (chunk_size / 4);
-    //        temp[new_index] = this->m_range_data_array[offset + i];
+    //            buff_async_hdls.push_back(buffers_out[buff_idx].async("fftGraph[" + std::to_string(buff_idx) + "].gmio_out[" + std::to_string(ssr) + "]",
+    //                                                                  XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+    //                                                                  per_ssr_byte_size, 
+    //                                                                  byte_offset));
+    //        }
     //    }
     //}
 
-    //// Copy the rearranged data back into the original array
-    //for (int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
-    //    this->m_range_data_array[i] = temp[i];
-    //}
 
-    //for(int r=0; r<5; r++) {
-    //    for(int c=0; c<5; c++) {
-    //        int index = (r*MAT_COLS) + c;
-    //        printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", r, c, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
+    // 54 MS TO COMPLETE BUT WRONG
+    //int per_ssr_byte_size = BLOCK_SIZE_BYTES / FFT_NPORTS;
+
+    //for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+    //    for (int ssr = 0; ssr < FFT_NPORTS; ssr++) {
+    //        buffers_in[buff_idx].async("fftGraph[" + std::to_string(buff_idx) + "].gmio_in[" + std::to_string(ssr) + "]", 
+    //                                   XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+    //                                   per_ssr_byte_size, 
+    //                                   ssr*per_ssr_byte_size);
+
+    //        buff_async_hdls.push_back(buffers_out[buff_idx].async("fftGraph[" + std::to_string(buff_idx) + "].gmio_out[" + std::to_string(ssr) + "]",
+    //                                                              XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+    //                                                              per_ssr_byte_size, 
+    //                                                              ssr*per_ssr_byte_size));
     //    }
     //}
-    //int index = (0*MAT_COLS) + 2047;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 2047, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 2048;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 2048, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 2049;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 2049, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 4095;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 4095, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 4096;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 4096, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 4097;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 4097, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
+    
+    // 733 MS TO COMPLETE WITH BELOW LINE UNCOMMENTED, OTHERWISE 54 MS
+    //this->reshapeMatrix(this->m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
 
-    //// Free the temporary array
-    //free(temp);
-    //////////////////////TODO: TESTING...REMOVE WHEN DONE///////////////////////////// 
 
-    for(int i = 0; i < num_of_buffers; i++) {
-        for (int j = 0; j < ssr; j++) {
-            buffers_in[i].async("fftGraph[" + std::to_string(i) + "].gmio_in[" + std::to_string(j) + "]", 
-                                XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                per_ssr_byte_size, 
-                                j*per_ssr_byte_size);
+    int per_ssr_byte_size = BLOCK_SIZE_BYTES / FFT_NPORTS;
 
-            buff_async_hdls.push_back(buffers_out[i].async("fftGraph[" + std::to_string(i) + "].gmio_out[" + std::to_string(j) + "]",
-                                                           XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                                           per_ssr_byte_size, 
-                                                           j*per_ssr_byte_size));
+    for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+        // Number of range lines to process
+        this->m_fft_graph_hdls[buff_idx].run(MAT_ROWS);
+
+        for (int ssr = 0; ssr < FFT_NPORTS; ssr++) {
+            buffers_in[buff_idx].async("fftGraph[" + std::to_string(buff_idx) + "].gmio_in[" + std::to_string(ssr) + "]", 
+                                       XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                       per_ssr_byte_size, 
+                                       ssr*per_ssr_byte_size);
+
+            buff_async_hdls.push_back(buffers_out[buff_idx].async("fftGraph[" + std::to_string(buff_idx) + "].gmio_out[" + std::to_string(ssr) + "]",
+                                                                  XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+                                                                  per_ssr_byte_size, 
+                                                                  ssr*per_ssr_byte_size));
         }
     }
-    
+
     // Block until AIE has finished with above operations. Could do other work on 
     // processor here if needed.
-    for(int i = 0; i < num_of_buffers; i++) {
-        for (int j = 0; j < ssr; j++) {
-            buff_async_hdls[i*ssr + j].wait();
-        }
+    for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
+        buff_async_hdls[idx].wait();
     }
 }
 
 void SARBackproject::ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers) {
 
     std::vector<xrt::bo::async_handle> buff_async_hdls;
-    int ssr = (1 << TP_PARALLEL_POWER);
-    int per_ssr_byte_size = BLOCK_SIZE_BYTES / ssr;
+    int per_ssr_byte_size = BLOCK_SIZE_BYTES / FFT_NPORTS;
 
-    //////////////////////TODO: TESTING...REMOVE WHEN DONE///////////////////////////// 
-    //// Create a temporary array to hold the rearranged data
-    //TT_DATA *temp = (TT_DATA *)malloc(BLOCK_SIZE_BYTES);
-    //
-    //// Rearrange the data into the temp array
-    //int chunk_size = MAT_COLS;
-    //int num_datasets = BLOCK_SIZE_ENTRIES / chunk_size;
+    for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+        // Number of range lines to process
+        this->m_ifft_graph_hdls[buff_idx].run(MAT_ROWS);
 
-    //for (int dataset = 0; dataset < num_datasets; dataset++) {
-    //    int offset = dataset * chunk_size;
+        for (int ssr = 0; ssr < FFT_NPORTS; ssr++) {
+            buffers_in[buff_idx].async("ifftGraph[" + std::to_string(buff_idx) + "].gmio_in[" + std::to_string(ssr) + "]", 
+                                       XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                       per_ssr_byte_size, 
+                                       ssr*per_ssr_byte_size);
 
-    //    for (int i = 0; i < chunk_size; i++) {
-    //        int new_index = offset + (i / 4) + (i % 4) * (chunk_size / 4);
-    //        temp[new_index] = this->m_range_data_array[offset + i];
-    //    }
-    //}
-
-    //// Copy the rearranged data back into the original array
-    //for (int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
-    //    this->m_range_data_array[i] = temp[i];
-    //}
-
-    //for(int r=0; r<5; r++) {
-    //    for(int c=0; c<5; c++) {
-    //        int index = (r*MAT_COLS) + c;
-    //        printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", r, c, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //    }
-    //}
-    //int index = (0*MAT_COLS) + 2047;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 2047, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 2048;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 2048, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 2049;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 2049, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 4095;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 4095, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 4096;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 4096, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-    //index = (0*MAT_COLS) + 4097;
-    //printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", 0, 4097, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-
-    //// Free the temporary array
-    //free(temp);
-    //////////////////////TODO: TESTING...REMOVE WHEN DONE///////////////////////////// 
-    
-
-    for(int i = 0; i < num_of_buffers; i++) {
-        for (int j = 0; j < ssr; j++) {
-            buffers_in[i].async("ifftGraph[" + std::to_string(i) + "].gmio_in[" + std::to_string(j) + "]", 
-                                XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                per_ssr_byte_size, 
-                                j*per_ssr_byte_size);
-
-            buff_async_hdls.push_back(buffers_out[i].async("ifftGraph[" + std::to_string(i) + "].gmio_out[" + std::to_string(j) + "]",
-                                                           XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                                           per_ssr_byte_size, 
-                                                           j*per_ssr_byte_size));
+            buff_async_hdls.push_back(buffers_out[buff_idx].async("ifftGraph[" + std::to_string(buff_idx) + "].gmio_out[" + std::to_string(ssr) + "]",
+                                                                  XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+                                                                  per_ssr_byte_size, 
+                                                                  ssr*per_ssr_byte_size));
         }
-    }
-    
-    // Block until AIE has finished with above operations. Could do other work on 
-    // processor here if needed.
-    for(int i = 0; i < num_of_buffers; i++) {
-        for (int j = 0; j < ssr; j++) {
-            buff_async_hdls[i*ssr + j].wait();
-        }
-    }
-}
-
-void SARBackproject::cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers) {
-    int offset = 0;
-    std::vector<xrt::bo::async_handle> buffer_async_hdls;
-
-    for(int i = 0; i < num_of_buffers; i++) {
-        buffers_in[i].async("cplxConjGraph[" + std::to_string(i) + "].gmio_in", 
-                            XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                            BLOCK_SIZE_BYTES, 
-                            offset);
-        buffer_async_hdls.push_back(buffers_out[i].async("cplxConjGraph[" + std::to_string(i) + "].gmio_out",
-                                                         XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                                         BLOCK_SIZE_BYTES, 
-                                                         offset));
     }
 
     // Block until AIE has finished with above operations. Could do other work on 
     // processor here if needed.
-    for(int i = 0; i < num_of_buffers; i++) {
-        buffer_async_hdls[i].wait();
+    for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
+        buff_async_hdls[idx].wait();
     }
 }
+
+//void SARBackproject::cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers) {
+//    int offset = 0;
+//    std::vector<xrt::bo::async_handle> buff_async_hdls;
+//
+//    for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+//        // Number of range lines to process
+//        this->m_cplx_conj_graph_hdls[buff_idx].run(MAT_ROWS);
+//
+//        buffers_in[buff_idx].async("cplxConjGraph[" + std::to_string(buff_idx) + "].gmio_in", 
+//                                   XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+//                                   BLOCK_SIZE_BYTES, 
+//                                   offset);
+//        buff_async_hdls.push_back(buffers_out[buff_idx].async("cplxConjGraph[" + std::to_string(buff_idx) + "].gmio_out",
+//                                                              XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+//                                                              BLOCK_SIZE_BYTES, 
+//                                                              offset));
+//    }
+//
+//    // Block until AIE has finished with above operations. Could do other work on 
+//    // processor here if needed.
+//    for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
+//        buff_async_hdls[idx].wait();
+//    }
+//}
 
 void SARBackproject::elemMatMult(xrt::aie::bo* buffersA_in, xrt::aie::bo* buffersB_in,
                                   xrt::aie::bo* buffers_out, int num_of_buffers) {
-    std::vector<xrt::bo::async_handle> buffer_async_hdls;
+    std::vector<xrt::bo::async_handle> buff_async_hdls;
     int per_ssr_byte_size = BLOCK_SIZE_BYTES / TP_SSR;
 
-    for(int i = 0; i < num_of_buffers; i++) {
-        for (int j = 0; j < TP_SSR; j++) {
-            buffersA_in[i].async("hpGraph[" + std::to_string(i) + "].gmio_in_A[" + std::to_string(j) + "]", 
-                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                 per_ssr_byte_size, 
-                                 j*per_ssr_byte_size);
+    for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
 
-            buffersB_in[i].async("hpGraph[" + std::to_string(i) + "].gmio_in_B[" + std::to_string(j) + "]", 
-                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                 per_ssr_byte_size, 
-                                 j*per_ssr_byte_size);
+        // Number of range lines to process (divide work up across multiple AIEs)
+        this->m_hp_graph_hdls[buff_idx].run(MAT_ROWS/TP_NUM_FRAMES);
 
-            buffer_async_hdls.push_back(buffers_out[i].async("hpGraph[" + std::to_string(i) + "].gmio_out[" + std::to_string(j) + "]",
-                                                             XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                                             per_ssr_byte_size, 
-                                                             j*per_ssr_byte_size));
+        for (int ssr = 0; ssr < TP_SSR; ssr++) {
+            buffersA_in[buff_idx].async("hpGraph[" + std::to_string(buff_idx) + "].gmio_in_A[" + std::to_string(ssr) + "]", 
+                                        XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                        per_ssr_byte_size, 
+                                        ssr*per_ssr_byte_size);
+
+            buffersB_in[buff_idx].async("hpGraph[" + std::to_string(buff_idx) + "].gmio_in_B[" + std::to_string(ssr) + "]", 
+                                        XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                        per_ssr_byte_size, 
+                                        ssr*per_ssr_byte_size);
+
+            buff_async_hdls.push_back(buffers_out[buff_idx].async("hpGraph[" + std::to_string(buff_idx) + "].gmio_out[" + std::to_string(ssr) + "]",
+                                                                  XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+                                                                  per_ssr_byte_size, 
+                                                                  ssr*per_ssr_byte_size));
         }
     }
     
     // Block until AIE has finished with above operations. Could do other work on 
     // processor here if needed.
-    for(int i = 0; i < num_of_buffers; i++) {
-        for (int j = 0; j < TP_SSR; j++) {
-            buffer_async_hdls[i*TP_SSR + j].wait();
-        }
+    for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
+        buff_async_hdls[idx].wait();
     }
 }

@@ -35,6 +35,7 @@ class SARBackproject {
         // AIE Graphs
         std::vector<xrt::graph> m_fft_graph_hdls;
         std::vector<xrt::graph> m_ifft_graph_hdls;
+        std::vector<xrt::graph> m_cplx_conj_graph_hdls;
         std::vector<xrt::graph> m_hp_graph_hdls;
 
         // PRIVATE FUNCTIONS
@@ -43,7 +44,7 @@ class SARBackproject {
         
 
     public:
-        // Buffer objects and corresponding arrays for AIE
+        // Buffer objects and corresponding arrays for AIE processing
         xrt::aie::bo m_range_data_buffer;
         TT_DATA* m_range_data_array;
         xrt::aie::bo m_ref_func_range_comp_buffer;
@@ -59,13 +60,12 @@ class SARBackproject {
         static void printTimeDiff(const char *msg);
         static void printTotalTime(int curr_iter);
         static void printAvgTime(int iterations);
-        //static void transpose(const TT_DATA* orig_matrix, TT_DATA* new_matrix);
-        void runGraphs();
-        void endGraphs();
-        bool openHDF5File();
+        static void reshapeMatrix(TT_DATA* input, int rows, int cols, int segment, bool reverse=false);
+        static void strideCols(TT_DATA* input, int rows, int cols, int stride, bool reverse=false);
+        bool fetchRadarData();
         void fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
-        void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        //void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void elemMatMult(xrt::aie::bo* buffersA_in, xrt::aie::bo* buffersB_in, 
                          xrt::aie::bo* buffers_out, int num_of_buffers);
 
