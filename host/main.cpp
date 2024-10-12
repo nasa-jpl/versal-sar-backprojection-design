@@ -98,7 +98,7 @@ int main(int argc, char ** argv) {
     // Buffer number for telling AIE kernels how many buffers to operate on in parallel
     int buff_num = 1;
 
-    std::cout << "\nReshape refrence function for FFT (HOST - OpenMP)..." << std::endl;
+    std::cout << "\nReshape reference function for FFT (HOST - OpenMP)..." << std::endl;
     SARBackproject::startTime();
     ifcc.reshapeMatrix(ifcc.m_ref_func_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
     SARBackproject::endTime();
@@ -113,7 +113,7 @@ int main(int argc, char ** argv) {
     SARBackproject::printTimeDiff("FFT completed (AIE)");
     
     //TODO: DEBUG
-    print_arr(ifcc.m_ref_func_array, 5, 5);
+    //print_arr(ifcc.m_ref_func_array, 5, 5);
 
     std::cout << "\nComplex conjugate on reference function (AIE)..." << std::endl;
     buffers_in[0] = ifcc.m_ref_func_buffer;
@@ -124,7 +124,7 @@ int main(int argc, char ** argv) {
     SARBackproject::printTimeDiff("Complex conjugate completed (AIE)");
 
     //TODO: DEBUG
-    print_arr(ifcc.m_ref_func_array, 5, 5);
+    //print_arr(ifcc.m_ref_func_array, 5, 5);
 
     std::cout << "\nReshape range data for FFT (HOST - OpenMP)..." << std::endl;
     SARBackproject::startTime();
@@ -141,7 +141,7 @@ int main(int argc, char ** argv) {
     SARBackproject::printTimeDiff("FFT completed (AIE)");
 
     //TODO: DEBUG
-    print_arr(ifcc.m_range_data_array, 5, 5);
+    //print_arr(ifcc.m_range_data_array, 5, 5);
 
     std::cout << "\nElement-wise matrix multiply between ref function and range data (AIE)..." << std::endl;
     buffersA_in[0] = ifcc.m_range_data_buffer;
@@ -153,7 +153,7 @@ int main(int argc, char ** argv) {
     SARBackproject::printTimeDiff("Element-wise matrix multiply completed (AIE)");
 
     //TODO: DEBUG
-    print_arr(ifcc.m_range_data_array, 5, 5);
+    //print_arr(ifcc.m_range_data_array, 5, 5);
 
     std::cout << "\niFFT on range data (AIE)..." << std::endl;
     buffers_in[0] = ifcc.m_range_data_buffer;
@@ -164,7 +164,7 @@ int main(int argc, char ** argv) {
     SARBackproject::printTimeDiff("iFFT completed (AIE)");
 
     //TODO: DEBUG
-    print_arr(ifcc.m_range_data_array, 5, 10, TP_POINT_SIZE);
+    //print_arr(ifcc.m_range_data_array, 5, 5, TP_POINT_SIZE);
     //ifftErrorCheck(ifcc.m_range_data_array);
 
     //for(int n=0; n<iter; n++) {
