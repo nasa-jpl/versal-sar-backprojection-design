@@ -16,13 +16,15 @@
 
 uint8_t fft_graph_insts = 0;
 uint8_t ifft_graph_insts = 0;
-//uint8_t cplx_conj_graph_insts = 0;
+uint8_t cplx_conj_graph_insts = 0;
 uint8_t hp_graph_insts = 0;
 
 const int INSTANCES = 1;
-FFTGraph<0,0> fftGraph[INSTANCES];
-IFFTGraph<0,2> ifftGraph[INSTANCES];
-//CplxConjGraph cplxConjGraph[CPLX_CONJ_INSTANCES*INSTANCES];
+//FFTGraph<2,5> fftGraph[INSTANCES];
+//IFFTGraph<22,5> ifftGraph[INSTANCES];
+FFTGraph<-1,-1> fftGraph[INSTANCES];
+IFFTGraph<-1,-1> ifftGraph[INSTANCES];
+CplxConjGraph cplxConjGraph[INSTANCES];
 HPGraph hpGraph[INSTANCES];
 
 #if defined(__AIESIM__) || defined(__X86SIM__)

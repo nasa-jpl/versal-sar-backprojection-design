@@ -10,14 +10,7 @@
 
 using namespace adf;
 
-void cplx_conj_kern(input_buffer<TT_DATA, extents<TP_POINT_SIZE>> & restrict in, 
-                    output_buffer<TT_DATA, extents<TP_POINT_SIZE>> & restrict out);
-
-void cols_peak_kern(input_buffer<TT_DATA, extents<MAT_COLS>> & restrict in, 
-                    output_buffer<TT_DATA, extents<1>> & restrict out);
-
-void rows_peak_kern(input_buffer<TT_DATA, extents<MAT_ROWS>> & restrict in, 
-                    output_buffer<TT_DATA, extents<1>> & restrict out);
-
+void cplx_conj_kern(input_buffer<TT_DATA, extents<2048>> & restrict in, 
+                    output_buffer<TT_DATA, extents<2048>> & restrict out);
 
 #endif

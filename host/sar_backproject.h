@@ -47,8 +47,8 @@ class SARBackproject {
         // Buffer objects and corresponding arrays for AIE processing
         xrt::aie::bo m_range_data_buffer;
         TT_DATA* m_range_data_array;
-        xrt::aie::bo m_ref_func_range_comp_buffer;
-        TT_DATA* m_ref_func_range_comp_array;
+        xrt::aie::bo m_ref_func_buffer;
+        TT_DATA* m_ref_func_array;
 
     public:
         // Constructor
@@ -62,10 +62,11 @@ class SARBackproject {
         static void printAvgTime(int iterations);
         static void reshapeMatrix(TT_DATA* input, int rows, int cols, int segment, bool reverse=false);
         static void strideCols(TT_DATA* input, int rows, int cols, int stride, bool reverse=false);
+        void runGraphs();
         bool fetchRadarData();
         void fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
-        //void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void elemMatMult(xrt::aie::bo* buffersA_in, xrt::aie::bo* buffersB_in, 
                          xrt::aie::bo* buffers_out, int num_of_buffers);
 
