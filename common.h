@@ -18,12 +18,14 @@
 // This must be 2^N where N is an integer in the range 4 to 16 inclusive.
 // When TP_DYN_PT_SIZE is set, TP_POINT_SIZE describes the maximum point size possible.
 // NOTE: In practice, I get an error when exceeding 4096 (2^12).
-#define TP_POINT_SIZE 8192
-#define MAT_ROWS 4394
+//#define TP_POINT_SIZE 8192
+//#define MAT_ROWS 4394
+
 //#define TP_POINT_SIZE 8192
 //#define MAT_ROWS 11539
-//#define TP_POINT_SIZE 128
-//#define MAT_ROWS 2
+
+#define TP_POINT_SIZE 128
+#define MAT_ROWS 2
 #define MAT_COLS TP_POINT_SIZE
 //#define TMPL_MAT_ROWS TP_POINT_SIZE/8
 //#define TMPL_MAT_COLS TP_POINT_SIZE/8
@@ -208,5 +210,17 @@
 // 3: symmetric = Controls symmetric saturation. Symmetric saturation rounds an n-bit 
 // signed value in the range [- ( 2^(n-1) -1 ) : +2^(n-1) - 1 ].
 #define TP_SAT 1
+
+// BACKPROJECTION VARIABLES
+
+// Number of BP kernels each taking chunks of the range lines over slow time
+#define BP_SOLVERS 4
+
+// Number of slow time elements to process:
+// X position of antenna 
+// Y position of antenna 
+// Z position of antenna 
+// Range to center of scene (ref_range)
+#define ST_ELEMENTS 4
 
 #endif // COMMON_H

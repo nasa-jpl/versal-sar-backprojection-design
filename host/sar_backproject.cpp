@@ -69,6 +69,11 @@ void SARBackproject::endTime() {
     clock_gettime(CLOCK_MONOTONIC, &time_end);
 }
 
+void SARBackproject::resetTimer() {
+    total_time = 0;
+    total_avg_time = 0;
+}
+
 void SARBackproject::printTimeDiff(const char *msg) {
     double elapsed_time_millis;
 

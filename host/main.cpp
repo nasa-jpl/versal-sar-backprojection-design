@@ -167,6 +167,28 @@ int main(int argc, char ** argv) {
     //print_arr(ifcc.m_range_data_array, 5, 5, TP_POINT_SIZE);
     //ifftErrorCheck(ifcc.m_range_data_array);
 
+    std::cout << "\nReshape range data after IFFT (HOST - OpenMP)..." << std::endl;
+    SARBackproject::startTime();
+    ifcc.reshapeMatrix(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS, true);
+    SARBackproject::endTime();
+    SARBackproject::printTimeDiff("Reshape completed (HOST - OpenMP)");
+
+    TT_DATA bp_ref;
+    for(int az=0; az<MAT_ROWS; az++) {
+        bp_ref = exp((j*4*pi*az)/lambda);
+
+        std::cout << "\nFFT on reference function (AIE)..." << std::endl;
+        buffers_in[0] = ifcc.m_bp_ref_func_buffer;
+        buffers_out[0] = ifcc.m_bp_ref_func_buffer;
+        SARBackproject::startTime();
+        ifcc.fft(buffers_in, buffers_out, buff_num);
+        SARBackproject::endTime();
+        SARBackproject::printTimeDiff("FFT completed (AIE)");
+
+    }
+
+    
+
     //for(int n=0; n<iter; n++) {
     //    std::cout << "\n# ITERATION " << n+1 << ": ";
 

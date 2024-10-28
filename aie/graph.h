@@ -16,6 +16,7 @@ extern uint8_t fft_graph_insts;
 extern uint8_t ifft_graph_insts;
 extern uint8_t hp_graph_insts;
 extern uint8_t cplx_conj_graph_insts;
+extern uint8_t bp_graph_insts;
 
 template<int FFT_X, int FFT_Y>
 class FFTGraph: public graph
@@ -222,11 +223,11 @@ class HPGraph: public graph
                 gmio_in_A[i] = input_gmio::create("gmio_in_vecA_" + std::to_string(hp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 gmio_in_B[i] = input_gmio::create("gmio_in_vecB_" + std::to_string(hp_graph_insts) + "_" + std::to_string(i), 256, 1000);
 
-                connect<>(gmio_in_A[i].out[0], hpGraph.inA[i]);
-                connect<>(gmio_in_B[i].out[0], hpGraph.inB[i]);
+                connect(gmio_in_A[i].out[0], hpGraph.inA[i]);
+                connect(gmio_in_B[i].out[0], hpGraph.inB[i]);
 
                 gmio_out[i] = output_gmio::create("gmio_out_vec_" + std::to_string(hp_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                connect<>(hpGraph.out[i], gmio_out[i].in[0]);
+                connect(hpGraph.out[i], gmio_out[i].in[0]);
             }
 
             ++hp_graph_insts;
@@ -247,8 +248,8 @@ class CplxConjGraph: public graph
             gmio_out = output_gmio::create("gmio_out_cplx_conj_" + std::to_string(cplx_conj_graph_insts), 256, 1000);
             gmio_in = input_gmio::create("gmio_in_cplx_conj_" + std::to_string(cplx_conj_graph_insts), 256, 1000);
 
-            connect<>(gmio_in.out[0], k_m.in[0]);
-            connect<>(k_m.out[0], gmio_out.in[0]);
+            connect(gmio_in.out[0], k_m.in[0]);
+            connect(k_m.out[0], gmio_out.in[0]);
 
             source(k_m) = "cplx_conj.cc";
 
@@ -259,3 +260,109 @@ class CplxConjGraph: public graph
         }
 };
 
+//class PhaseCorrGraph: public graph
+//{
+//    private:
+//        kernel k_m;
+//
+//    public:
+//        input_gmio gmio_in_x_ant_pos;
+//        input_gmio gmio_in_y_ant_pos;
+//        input_gmio gmio_in_z_ant_pos;
+//        input_gmio gmio_in_ref_range;
+//        input_gmio gmio_in_ph_data;
+//        output_gmio gmio_out_img;
+//
+//        PhaseCorrGraph() {
+//            k_m = kernel::create(phase_corr_kern);
+//            gmio_in_x_ant_pos = input_gmio::create("gmio_in_x_ant_pos_" + std::to_string(phase_corr_graph_insts), 256, 1000);
+//            gmio_in_y_ant_pos = input_gmio::create("gmio_in_y_ant_pos_" + std::to_string(phase_corr_graph_insts), 256, 1000);
+//            gmio_in_z_ant_pos = input_gmio::create("gmio_in_z_ant_pos_" + std::to_string(phase_corr_graph_insts), 256, 1000);
+//            gmio_in_ref_range = input_gmio::create("gmio_in_ref_range_" + std::to_string(phase_corr_graph_insts), 256, 1000);
+//            gmio_in_ph_data = input_gmio::create("gmio_in_ph_data_" + std::to_string(phase_corr_graph_insts), 256, 1000);
+//            gmio_out_img = output_gmio::create("gmio_out_img_" + std::to_string(phase_corr_graph_insts), 256, 1000);
+//
+//            connect<>(gmio_in_x_ant_pos.out[0], k_m.in[0]);
+//            connect<>(gmio_in_y_ant_pos.out[0], k_m.in[1]);
+//            connect<>(gmio_in_z_ant_pos.out[0], k_m.in[2]);
+//            connect<>(gmio_in_ref_range.out[0], k_m.in[3]);
+//            connect<>(gmio_in_ph_data.out[0], k_m.in[4]);
+//            connect<>(k_m.out[0], gmio_out_img.in[0]);
+//
+//            source(k_m) = "phase_corr.cc";
+//
+//            // Runtime ratio gives the tools the flexibility to put multiple AIE kernels on a single tile
+//            runtime<ratio>(k_m) = 1.0;
+//
+//            ++phase_corr_graph_insts;
+//        }
+//};
+
+class BackProjectionGraph: public graph
+{
+    private:
+        kernel sts_km;
+        kernel bp_km[BP_SOLVERS];
+
+    public:
+        // I/O ports for slow time splicer kernel
+        input_gmio gmio_in_x_ant_pos;
+        input_gmio gmio_in_y_ant_pos;
+        input_gmio gmio_in_z_ant_pos;
+        input_gmio gmio_in_ref_range;
+
+        // I/O ports for backprojection kernel
+        input_gmio gmio_in_ph_data[BP_SOLVERS];
+        output_gmio gmio_out_img[BP_SOLVERS];
+
+        BackProjectionGraph() {
+            // Create slow time splicer kernel
+            sts_km = kernel::create(slowtime_splicer_kern);
+            
+            // Slow time splicer kernel ports
+            gmio_in_x_ant_pos = input_gmio::create("gmio_in_x_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
+            gmio_in_y_ant_pos = input_gmio::create("gmio_in_y_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
+            gmio_in_z_ant_pos = input_gmio::create("gmio_in_z_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
+            gmio_in_ref_range = input_gmio::create("gmio_in_ref_range_" + std::to_string(bp_graph_insts), 256, 1000);
+
+            // Slow time splicer GMIO connections
+            connect(gmio_in_x_ant_pos.out[0], sts_km.in[0]);
+            connect(gmio_in_y_ant_pos.out[0], sts_km.in[1]);
+            connect(gmio_in_z_ant_pos.out[0], sts_km.in[2]);
+            connect(gmio_in_ref_range.out[0], sts_km.in[3]);
+            
+            // Slow time splicer source and ratio
+            source(sts_km) = "backprojection.cc";
+            runtime<ratio>(sts_km) = 1.0;
+
+            for (int i=0; i<BP_SOLVERS; i++) {
+                // Create backprojection kernel. Instantiating Backprojection allows
+                // for keeping track of instances across instantiations. This gives
+                // each backprojection kernel instance an ID it can refrence to do
+                // something unique based on its ID.
+                bp_km[i] = kernel::create_object<Backprojection>(i);
+
+                // Backprojection kernel ports
+                gmio_in_ph_data[i] = input_gmio::create("gmio_in_ph_data_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+                gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+
+                // Multicasting AIE to AIE connection
+                connect(sts_km.out[0], bp_km[i].in[0]);
+
+                // Backprojection source and ratio
+                source(bp_km[i]) = "backprojection.cc";
+                runtime<ratio>(bp_km[i]) = 1.0;
+            }
+
+            for (int i=0; i<BP_SOLVERS; i++) {
+                // Backprojection GMIO connections accounting for fftshifting
+                int bp_fftshift_id = i-(BP_SOLVERS/2);
+                if (bp_fftshift_id < 0)
+                    bp_fftshift_id+=BP_SOLVERS;
+                connect(gmio_in_ph_data[i].out[0], bp_km[bp_fftshift_id].in[1]);
+                connect(bp_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
+            }
+
+            ++bp_graph_insts;
+        }
+};

@@ -57,6 +57,7 @@ class SARBackproject {
         // PUBLIC FUNCTIONS
         static void startTime();
         static void endTime();
+        static void resetTimer();
         static void printTimeDiff(const char *msg);
         static void printTotalTime(int curr_iter);
         static void printAvgTime(int iterations);

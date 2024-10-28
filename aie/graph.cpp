@@ -18,14 +18,16 @@ uint8_t fft_graph_insts = 0;
 uint8_t ifft_graph_insts = 0;
 uint8_t cplx_conj_graph_insts = 0;
 uint8_t hp_graph_insts = 0;
+uint8_t bp_graph_insts = 0;
 
 const int INSTANCES = 1;
-//FFTGraph<2,5> fftGraph[INSTANCES];
-//IFFTGraph<22,5> ifftGraph[INSTANCES];
-FFTGraph<-1,-1> fftGraph[INSTANCES];
-IFFTGraph<-1,-1> ifftGraph[INSTANCES];
-CplxConjGraph cplxConjGraph[INSTANCES];
-HPGraph hpGraph[INSTANCES];
+////FFTGraph<2,5> fftGraph[INSTANCES];
+////IFFTGraph<22,5> ifftGraph[INSTANCES];
+//FFTGraph<-1,-1> fftGraph[INSTANCES];
+//IFFTGraph<-1,-1> ifftGraph[INSTANCES];
+////CplxConjGraph cplxConjGraph[INSTANCES];
+//HPGraph hpGraph[INSTANCES];
+BackProjectionGraph bpGraph[INSTANCES];
 
 #if defined(__AIESIM__) || defined(__X86SIM__)
 
@@ -129,7 +131,7 @@ void reorderDataArray(TT_DATA* data_array) {
 int main(int argc, char ** argv) {
 
     // Number of iterations to run
-    const int ITER = 2;
+    const int ITER = 1;
 
     // Generate random seed
     std::time_t seed = std::time(0);
@@ -141,34 +143,52 @@ int main(int argc, char ** argv) {
 
     // Initialize all AIE graphs
     for(int inst=0; inst<INSTANCES; inst++) {
-        fftGraph[inst].init();
-        hpGraph[inst].init();
-        ifftGraph[inst].init();
+        //fftGraph[inst].init();
+        //hpGraph[inst].init();
+        //ifftGraph[inst].init();
+        ////cplxConjGraph[inst].init();
+        bpGraph[inst].init();
     }
-    //for(int inst=0; inst<CPLX_CONJ_INSTANCES*INSTANCES; inst++) {
-    //    cplxConjGraph[inst].init();
-    //}
    
     // Allocating memory
-    TT_DATA* gold_data_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
-    std::vector<TT_DATA*> data_arrays;
-    for(int inst=0; inst<INSTANCES; inst++) {
-        data_arrays.push_back((TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES));
-    }
-    TT_DATA* one_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
+    //std::vector<TT_DATA*> data_arrays;
+    //for(int inst=0; inst<INSTANCES; inst++) {
+    //    data_arrays.push_back((TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES));
+    //}
+    //TT_DATA* one_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
 
-    // Populating inital sample data
-    for(int r = 0; r < MAT_ROWS; r++) {
-        for(int c = 0; c < MAT_COLS; c++) {
-            int index = (r*MAT_COLS)+c;
-            if (c == 1) {
-                gold_data_array[index] = (TT_DATA) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
-            }
-            else {
-                gold_data_array[index] = (TT_DATA) {0, 0};
-            }
-        }
+    // Allocate and populate memory
+    //TT_DATA* gold_data_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
+    //for(int r = 0; r < MAT_ROWS; r++) {
+    //    for(int c = 0; c < MAT_COLS; c++) {
+    //        int index = (r*MAT_COLS)+c;
+    //        if (c == 1) {
+    //            gold_data_array[index] = (TT_DATA) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
+    //        }
+    //        else {
+    //            gold_data_array[index] = (TT_DATA) {0, 0};
+    //        }
+    //    }
+    //}
+
+    const int PULSES = 1;
+    float* x_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    float* y_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    float* z_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    float* ref_range_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    for(int i = 0; i < PULSES; i++) {
+        x_ant_data_array[i] = 7089.2646;
+        y_ant_data_array[i] = 0.5289;
+        z_ant_data_array[i] = 7275.6719;
+        ref_range_data_array[i] = 10158.399;
     }
+
+    TT_DATA* ph_data_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
+    for(int i = 0; i < 8192; i++) {
+        ph_data_array[i] = (TT_DATA) {i, i};
+    }
+    
+    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
 
     //for(int r = 0; r < MAT_ROWS; r++) {
     //    for(int c = 0; c < MAT_COLS; c++) {
@@ -180,111 +200,134 @@ int main(int argc, char ** argv) {
     
     // Number of iteration for the AIE graphs to run
     for (int inst = 0; inst < INSTANCES; inst++) {
-        fftGraph[inst].run();
-        hpGraph[inst].run();
-        ifftGraph[inst].run();
+        //fftGraph[inst].run();
+        //hpGraph[inst].run();
+        //ifftGraph[inst].run();
+        ////cplxConjGraph[inst].run();
+        bpGraph[inst].run();
     }
-    //for (int inst = 0; inst < INSTANCES; inst++) {
-    //    fftGraph[inst].run(MAT_ROWS*ITER);
-    //    hpGraph[inst].run((MAT_ROWS/TP_NUM_FRAMES)*ITER);
-    //    ifftGraph[inst].run(MAT_ROWS*ITER);
-    //}
-
-    //for (int inst = 0; inst < CPLX_CONJ_INSTANCES*INSTANCES; inst++) {
-    //    cplxConjGraph[inst].run(MAT_ROWS*ITER);
-    //}
 
     int fft_per_ssr_entry_size = MAT_COLS / FFT_NPORTS;
     int fft_per_ssr_byte_size = fft_per_ssr_entry_size * sizeof(TT_DATA);
 
     //TODO: DEBUG
-    print_arr(gold_data_array, 2, 5);
+    //print_arr(gold_data_array, 2, 5);
    
     // Loop through pipeline ITER times
     for(int iter=0; iter<ITER; iter++) {
         for(int inst=0; inst<INSTANCES; inst++) {
-            printf("\nPERFORM FFT (ITER = %d) (INST = %d)\n", iter, inst);
+            printf("\nPERFORM BACKPROJECTION (ITER = %d) (INST = %d)\n", iter, inst);
 
-            // Set up AIE graph to run MAT_ROWS times
-            fftGraph[inst].run(MAT_ROWS);
+            // Set up AIE graph to run 1 time
+            bpGraph[inst].run(1);
 
             // Pass in data to AIE
-            for(int row=0; row<MAT_ROWS; row++) {
-                for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
-                    fftGraph[inst].gmio_in[ssr].gm2aie_nb(gold_data_array + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-                    fftGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-                }
+            bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, PULSES*sizeof(float));
+            bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, PULSES*sizeof(float));
+            bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, PULSES*sizeof(float));
+            bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, PULSES*sizeof(float));
+
+            for(int i=0; i<BP_SOLVERS; i++) {
+                bpGraph[inst].gmio_in_ph_data[i].gm2aie_nb(ph_data_array + i*2048, 2048*sizeof(TT_DATA));
+                bpGraph[inst].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
             }
         }
 
         // Block until AIE finishes
         for(int inst=0; inst<INSTANCES; inst++) {
-            for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
-                fftGraph[inst].gmio_out[ssr].wait();
+            for(int bp=0; bp<BP_SOLVERS; bp++) {
+                bpGraph[inst].gmio_out_img[bp].wait();
             }
-            //TODO: DEBUG
-            print_arr(data_arrays[inst], MAT_ROWS, MAT_COLS);
+        }
+        //TODO: DEBUG
+        for(int i=0; i<8192; i+=128) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }
 
-        //std::cout << "\nPERFORM COMPLEX CONJUGATE" << std::endl;
-        //for(int inst=0; inst<CPLX_CONJ_INSTANCES; inst++) {
-        //    cplxConjGraph[inst].gmio_in.gm2aie_nb(data_array+inst*CPLX_CONJ_POINT_SIZE, BLOCK_SIZE_BYTES/CPLX_CONJ_INSTANCES);
-        //    cplxConjGraph[inst].gmio_out.aie2gm_nb(data_array+inst*CPLX_CONJ_POINT_SIZE, BLOCK_SIZE_BYTES/CPLX_CONJ_INSTANCES);
+
+        //for(int inst=0; inst<INSTANCES; inst++) {
+        //    printf("\nPERFORM FFT (ITER = %d) (INST = %d)\n", iter, inst);
+
+        //    // Set up AIE graph to run MAT_ROWS times
+        //    fftGraph[inst].run(MAT_ROWS);
+
+        //    // Pass in data to AIE
+        //    for(int row=0; row<MAT_ROWS; row++) {
+        //        for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+        //            fftGraph[inst].gmio_in[ssr].gm2aie_nb(gold_data_array + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+        //            fftGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+        //        }
+        //    }
         //}
 
         //// Block until AIE finishes
-        //for(int inst=0; inst<CPLX_CONJ_INSTANCES; inst++) {
-        //    cplxConjGraph[inst].gmio_out.wait();
+        //for(int inst=0; inst<INSTANCES; inst++) {
+        //    for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+        //        fftGraph[inst].gmio_out[ssr].wait();
+        //    }
+        //    //TODO: DEBUG
+        //    print_arr(data_arrays[inst], MAT_ROWS, MAT_COLS);
         //}
 
-        ////TODO: DEBUG
-        //print_arr(data_array, 2, MAT_COLS);
+        ////std::cout << "\nPERFORM COMPLEX CONJUGATE" << std::endl;
+        ////for(int inst=0; inst<CPLX_CONJ_INSTANCES; inst++) {
+        ////    cplxConjGraph[inst].gmio_in.gm2aie_nb(data_array+inst*CPLX_CONJ_POINT_SIZE, BLOCK_SIZE_BYTES/CPLX_CONJ_INSTANCES);
+        ////    cplxConjGraph[inst].gmio_out.aie2gm_nb(data_array+inst*CPLX_CONJ_POINT_SIZE, BLOCK_SIZE_BYTES/CPLX_CONJ_INSTANCES);
+        ////}
 
-        int hp_per_ssr_byte_size = BLOCK_SIZE_BYTES / TP_SSR;
-        int hp_per_ssr_entry_size = BLOCK_SIZE_ENTRIES / TP_SSR;
-        for(int r = 0; r < MAT_ROWS; r++) {
-            for(int c = 0; c < MAT_COLS; c++) {
-                int index = (r*MAT_COLS)+c;
-                one_array[index] = (TT_DATA) {1, 0};
-            }
-        }
-        for(int inst=0; inst<INSTANCES; inst++) {
-            printf("\nPERFORM ELEMENT-WISE MATRIX MULTIPLY (ITER = %d) (INST = %d)\n", iter, inst);
-            hpGraph[inst].run(MAT_ROWS/TP_NUM_FRAMES);
-            for(int ssr=0; ssr<TP_SSR; ssr++) {
-                hpGraph[inst].gmio_in_A[ssr].gm2aie_nb(one_array+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
-                hpGraph[inst].gmio_in_B[ssr].gm2aie_nb(data_arrays[inst]+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
-                hpGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst]+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
-            }
-        }
+        ////// Block until AIE finishes
+        ////for(int inst=0; inst<CPLX_CONJ_INSTANCES; inst++) {
+        ////    cplxConjGraph[inst].gmio_out.wait();
+        ////}
 
-        // Block until AIE finishes
-        for(int inst=0; inst<INSTANCES; inst++) {
-            for(int ssr=0; ssr<TP_SSR; ssr++) {
-                hpGraph[inst].gmio_out[ssr].wait();
-            }
-            //TODO: DEBUG
-            print_arr(data_arrays[inst], MAT_ROWS, MAT_COLS);
-        }
+        //////TODO: DEBUG
+        ////print_arr(data_array, 2, MAT_COLS);
 
-        for(int inst=0; inst<INSTANCES; inst++) {
-            printf("\nPERFORM IFFT (ITER = %d) (INST = %d)\n", iter, inst);
-            ifftGraph[inst].run(MAT_ROWS);
-            for(int row=0; row<MAT_ROWS; row++) {
-                for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
-                    ifftGraph[inst].gmio_in[ssr].gm2aie_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-                    ifftGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
-                }
-            }
-        }
+        //int hp_per_ssr_byte_size = BLOCK_SIZE_BYTES / TP_SSR;
+        //int hp_per_ssr_entry_size = BLOCK_SIZE_ENTRIES / TP_SSR;
+        //for(int r = 0; r < MAT_ROWS; r++) {
+        //    for(int c = 0; c < MAT_COLS; c++) {
+        //        int index = (r*MAT_COLS)+c;
+        //        one_array[index] = (TT_DATA) {1, 0};
+        //    }
+        //}
+        //for(int inst=0; inst<INSTANCES; inst++) {
+        //    printf("\nPERFORM ELEMENT-WISE MATRIX MULTIPLY (ITER = %d) (INST = %d)\n", iter, inst);
+        //    hpGraph[inst].run(MAT_ROWS/TP_NUM_FRAMES);
+        //    for(int ssr=0; ssr<TP_SSR; ssr++) {
+        //        hpGraph[inst].gmio_in_A[ssr].gm2aie_nb(one_array+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
+        //        hpGraph[inst].gmio_in_B[ssr].gm2aie_nb(data_arrays[inst]+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
+        //        hpGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst]+ssr*hp_per_ssr_entry_size, hp_per_ssr_byte_size);
+        //    }
+        //}
 
-        // Block until AIE finishes
-        for(int inst=0; inst<INSTANCES; inst++) {
-            for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
-                ifftGraph[inst].gmio_out[ssr].wait();
-            }
-            total_err_cnt+=ifftErrorCheck(data_arrays[inst], gold_data_array);
-        }
+        //// Block until AIE finishes
+        //for(int inst=0; inst<INSTANCES; inst++) {
+        //    for(int ssr=0; ssr<TP_SSR; ssr++) {
+        //        hpGraph[inst].gmio_out[ssr].wait();
+        //    }
+        //    //TODO: DEBUG
+        //    print_arr(data_arrays[inst], MAT_ROWS, MAT_COLS);
+        //}
+
+        //for(int inst=0; inst<INSTANCES; inst++) {
+        //    printf("\nPERFORM IFFT (ITER = %d) (INST = %d)\n", iter, inst);
+        //    ifftGraph[inst].run(MAT_ROWS);
+        //    for(int row=0; row<MAT_ROWS; row++) {
+        //        for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+        //            ifftGraph[inst].gmio_in[ssr].gm2aie_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+        //            ifftGraph[inst].gmio_out[ssr].aie2gm_nb(data_arrays[inst] + MAT_COLS*row + ssr*fft_per_ssr_entry_size, fft_per_ssr_byte_size);
+        //        }
+        //    }
+        //}
+
+        //// Block until AIE finishes
+        //for(int inst=0; inst<INSTANCES; inst++) {
+        //    for(int ssr=0; ssr<FFT_NPORTS; ssr++) {
+        //        ifftGraph[inst].gmio_out[ssr].wait();
+        //    }
+        //    total_err_cnt+=ifftErrorCheck(data_arrays[inst], gold_data_array);
+        //}
     }
 
     // End AIE graphs

@@ -9,8 +9,8 @@
 
 using namespace adf;
 
-void cplx_conj_kern(input_buffer<TT_DATA, extents<2048>> &restrict in, 
-                    output_buffer<TT_DATA, extents<2048>> &restrict out) {
+void cplx_conj_kern(input_buffer<TT_DATA, extents<2048>>& __restrict in, 
+                    output_buffer<TT_DATA, extents<2048>>& __restrict out) {
     auto in_iter = aie::begin_vector<16>(in);
     auto out_iter = aie::begin_vector<16>(out);
 
