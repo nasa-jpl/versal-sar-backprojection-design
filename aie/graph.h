@@ -315,6 +315,9 @@ class BackProjectionGraph: public graph
         input_gmio gmio_in_ph_data[BP_SOLVERS];
         output_gmio gmio_out_img[BP_SOLVERS];
 
+        // RTP ports
+        //input_port range_freq_step[4];
+
         BackProjectionGraph() {
             // Create slow time splicer kernel
             sts_km = kernel::create(slowtime_splicer_kern);
@@ -362,6 +365,12 @@ class BackProjectionGraph: public graph
                 connect(gmio_in_ph_data[i].out[0], bp_km[bp_fftshift_id].in[1]);
                 connect(bp_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
             }
+        
+            // RTP Connections
+            //connect<parameter>(range_freq_step[0], bp_km[0].in[2]);
+            //connect<parameter>(range_freq_step[1], bp_km[1].in[2]);
+            //connect<parameter>(range_freq_step[2], bp_km[2].in[2]);
+            //connect<parameter>(range_freq_step[3], bp_km[3].in[2]);
 
             ++bp_graph_insts;
         }

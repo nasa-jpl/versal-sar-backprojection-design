@@ -194,21 +194,21 @@ void Backprojection::backprojection_kern(input_buffer<float, extents<ST_ELEMENTS
     float x_px_inc = m_px_grid.x_res*16;
     float y_px_inc = m_px_grid.y_res*16;
     
-    if (m_seg.st_x_px_bound || m_seg.en_x_px_bound || m_seg.all_x_px_bound) {
-        m_px_grid.display(m_id);
-        m_seg.display(m_id);
-        m_range_grid.display(m_id);
-        printf("%d: x_pxls=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-                x_pxls.get(0),  x_pxls.get(1),  x_pxls.get(2),  x_pxls.get(3), 
-                x_pxls.get(4),  x_pxls.get(5),  x_pxls.get(6),  x_pxls.get(7),
-                x_pxls.get(8),  x_pxls.get(9),  x_pxls.get(10), x_pxls.get(11), 
-                x_pxls.get(12), x_pxls.get(13), x_pxls.get(14), x_pxls.get(15));
-        printf("%d: y_pxls=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-                y_pxls.get(0),  y_pxls.get(1),  y_pxls.get(2),  y_pxls.get(3), 
-                y_pxls.get(4),  y_pxls.get(5),  y_pxls.get(6),  y_pxls.get(7),
-                y_pxls.get(8),  y_pxls.get(9),  y_pxls.get(10), y_pxls.get(11), 
-                y_pxls.get(12), y_pxls.get(13), y_pxls.get(14), y_pxls.get(15));
-    }
+    //if (m_seg.st_x_px_bound || m_seg.en_x_px_bound || m_seg.all_x_px_bound) {
+    //    m_px_grid.display(m_id);
+    //    m_seg.display(m_id);
+    //    m_range_grid.display(m_id);
+    //    printf("%d: x_pxls=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
+    //            x_pxls.get(0),  x_pxls.get(1),  x_pxls.get(2),  x_pxls.get(3), 
+    //            x_pxls.get(4),  x_pxls.get(5),  x_pxls.get(6),  x_pxls.get(7),
+    //            x_pxls.get(8),  x_pxls.get(9),  x_pxls.get(10), x_pxls.get(11), 
+    //            x_pxls.get(12), x_pxls.get(13), x_pxls.get(14), x_pxls.get(15));
+    //    printf("%d: y_pxls=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
+    //            y_pxls.get(0),  y_pxls.get(1),  y_pxls.get(2),  y_pxls.get(3), 
+    //            y_pxls.get(4),  y_pxls.get(5),  y_pxls.get(6),  y_pxls.get(7),
+    //            y_pxls.get(8),  y_pxls.get(9),  y_pxls.get(10), y_pxls.get(11), 
+    //            y_pxls.get(12), y_pxls.get(13), y_pxls.get(14), y_pxls.get(15));
+    //}
     //float dr = max_px_width/TP_POINT_SIZE;
     
     // Half of the sample size (used for shifting)
@@ -232,9 +232,9 @@ void Backprojection::backprojection_kern(input_buffer<float, extents<ST_ELEMENTS
 
     // Precalculate z_diff_sq
     auto z_diff_sq = z_ant*z_ant;
-    
-    aie::vector<TT_DATA,16> low_ph_data;
-    aie::vector<TT_DATA,16> high_ph_data;
+
+    aie::vector<TT_DATA,16> ph_data_vec;
+    //printf("ID: %d\n", m_id);
     if (m_seg.st_x_px_bound || m_seg.en_x_px_bound || m_seg.all_x_px_bound) {
         //printf("ID: %d\n", m_id);
         for(int y_idx=0; y_idx < m_px_grid.y_len/16; y_idx++) chess_prepare_for_pipelining {
@@ -264,42 +264,38 @@ void Backprojection::backprojection_kern(input_buffer<float, extents<ST_ELEMENTS
                 //auto differ_range_mask = right_mask & left_mask;
                 
                 //TODO: WRONG
-                auto px_diff = aie::sub(m_range_grid.range_width, x_pxls);
-                printf("%d: px_diff=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-                        px_diff.get(0),  px_diff.get(1),  px_diff.get(2),  px_diff.get(3), 
-                        px_diff.get(4),  px_diff.get(5),  px_diff.get(6),  px_diff.get(7),
-                        px_diff.get(8),  px_diff.get(9),  px_diff.get(10), px_diff.get(11), 
-                        px_diff.get(12), px_diff.get(13), px_diff.get(14), px_diff.get(15));
+                auto px_diff = aie::add(m_range_grid.range_width/2, x_pxls);
+                //printf("%d: px_diff=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
+                //        px_diff.get(0),  px_diff.get(1),  px_diff.get(2),  px_diff.get(3), 
+                //        px_diff.get(4),  px_diff.get(5),  px_diff.get(6),  px_diff.get(7),
+                //        px_diff.get(8),  px_diff.get(9),  px_diff.get(10), px_diff.get(11), 
+                //        px_diff.get(12), px_diff.get(13), px_diff.get(14), px_diff.get(15));
 
                 //aie::saturation_mode current_sat=aie::get_saturation();
                 //printf("CURRENT_SATURATION = %d\n", current_sat);
 
-                auto low_range_bins_float = aie::mul(px_diff, m_range_grid.inv_range_res).to_vector<float>(0);
-                printf("%d: low_range_bins_float=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-                        low_range_bins_float.get(0),  low_range_bins_float.get(1),  low_range_bins_float.get(2),  low_range_bins_float.get(3), 
-                        low_range_bins_float.get(4),  low_range_bins_float.get(5),  low_range_bins_float.get(6),  low_range_bins_float.get(7),
-                        low_range_bins_float.get(8),  low_range_bins_float.get(9),  low_range_bins_float.get(10), low_range_bins_float.get(11), 
-                        low_range_bins_float.get(12), low_range_bins_float.get(13), low_range_bins_float.get(14), low_range_bins_float.get(15));
+                auto range_bins_float = aie::mul(px_diff, m_range_grid.inv_range_res).to_vector<float>(0);
+                printf("%d: range_bins_float=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
+                        range_bins_float.get(0),  range_bins_float.get(1),  range_bins_float.get(2),  range_bins_float.get(3), 
+                        range_bins_float.get(4),  range_bins_float.get(5),  range_bins_float.get(6),  range_bins_float.get(7),
+                        range_bins_float.get(8),  range_bins_float.get(9),  range_bins_float.get(10), range_bins_float.get(11), 
+                        range_bins_float.get(12), range_bins_float.get(13), range_bins_float.get(14), range_bins_float.get(15));
 
                 // TODO: This is actually rounding correctly...but I need it to floor round...
-                aie::vector<int32,16> low_range_bins = aie::to_fixed<int32>(low_range_bins_float);
-                printf("%d: low_range_bins=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-                        low_range_bins.get(0),  low_range_bins.get(1),  low_range_bins.get(2),  low_range_bins.get(3), 
-                        low_range_bins.get(4),  low_range_bins.get(5),  low_range_bins.get(6),  low_range_bins.get(7),
-                        low_range_bins.get(8),  low_range_bins.get(9),  low_range_bins.get(10), low_range_bins.get(11), 
-                        low_range_bins.get(12), low_range_bins.get(13), low_range_bins.get(14), low_range_bins.get(15));
+                aie::vector<int32,16> range_bins = aie::to_fixed<int32>(range_bins_float);
+                printf("%d: range_bins=%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", m_id, 
+                        range_bins.get(0),  range_bins.get(1),  range_bins.get(2),  range_bins.get(3), 
+                        range_bins.get(4),  range_bins.get(5),  range_bins.get(6),  range_bins.get(7),
+                        range_bins.get(8),  range_bins.get(9),  range_bins.get(10), range_bins.get(11), 
+                        range_bins.get(12), range_bins.get(13), range_bins.get(14), range_bins.get(15));
 
                 //low_range_bins = aie::sub(low_range_bins, fft_seg);
                 //auto high_range_bins = aie::add(low_range_bins, 1);
 
-                
-                //for (int i=0; i<16; i++) {
-                //    low_ph_data[i] = ph_data_iter[low_range_bins[i]];
-                //    high_ph_data[i] = ph_data_iter[low_range_bins[i]+1];
-                //    printf("ph_corr[%d] = {%f, %f}\n", i, ((cfloat)ph_corr[i]).real, ((cfloat)ph_corr[i]).imag);
-                //    printf("low_ph_data[%d] = {%f, %f}\n", i, ((cfloat)low_ph_data[i]).real, ((cfloat)low_ph_data[i]).imag);
-                //    printf("high_ph_data[%d] = {%f, %f}\n", i, ((cfloat)high_ph_data[i]).real, ((cfloat)high_ph_data[i]).imag);
-                //}
+                for (int i=0; i<m_seg.valid_elems; i++) {
+                    ph_data_vec[i] = ph_data_iter[range_bins[i]-(m_id*2048)];
+                    printf("ph_data_vec[%d] = {%f, %f}\n", i, ((cfloat)ph_data_vec[i]).real, ((cfloat)ph_data_vec[i]).imag);
+                }
 
                 //y0+(x-x0)*((y1 - y0)/dr);
                 // Interpolation...HOW TO DO THIS
@@ -312,21 +308,107 @@ void Backprojection::backprojection_kern(input_buffer<float, extents<ST_ELEMENTS
 
                 //// Increment range bins to next segment
                 //range_bins = aie::add(dr, range_bins);
-                
-                // Increment X pixel segment
-                x_pxls = aie::add(x_pxls, x_px_inc);
             }
-
-            // Reset X pixel segment
-            x_pxls = aie::load_v<16>(start_x_pxls);
-
-            // Increment Y pixel segment
-            y_pxls = aie::add(y_pxls, y_px_inc);
         }
     }
+}
 
     //img_out.release();
-}
+    
+    //aie::vector<TT_DATA,16> low_ph_data;
+    //aie::vector<TT_DATA,16> high_ph_data;
+    //if (m_seg.st_x_px_bound || m_seg.en_x_px_bound || m_seg.all_x_px_bound) {
+    //    //printf("ID: %d\n", m_id);
+    //    for(int y_idx=0; y_idx < m_px_grid.y_len/16; y_idx++) chess_prepare_for_pipelining {
+    //        for(int x_idx=0; x_idx < m_px_grid.x_len/16; x_idx++) chess_prepare_for_pipelining {
+
+    //            // Calculate differential range for pixel segments
+    //            auto x = aie::sub(x_ant, x_pxls);
+    //            auto x_diff_sq = aie::mul_square(x).to_vector<float>(0);
+
+    //            auto y = aie::sub(y_ant, y_pxls);
+    //            auto y_diff_sq = aie::mul_square(y).to_vector<float>(0);
+
+    //            auto xy_add = aie::add(x_diff_sq, y_diff_sq);
+    //            auto xyz_add = aie::add(xy_add, z_diff_sq);
+
+    //            auto xyz_sqrt = aie::sqrt(xyz_add);
+
+    //            auto differ_range = aie::sub(xyz_sqrt, r0);
+
+    //            // Calculate phase correction for image
+    //            auto ph_corr_angle = aie::mul(m_radar_params.ph_corr_coef, differ_range).to_vector<float>(0);
+    //            auto ph_corr = aie::sincos_complex(ph_corr_angle);
+    //            
+    //            // Determine which pixels fall within the swath range
+    //            //auto right_mask = aie::ge(differ_range, min_range_bins);
+    //            //auto left_mask = aie::le(differ_range, max_range_bins);
+    //            //auto differ_range_mask = right_mask & left_mask;
+    //            
+    //            //TODO: WRONG
+    //            auto px_diff = aie::sub(m_range_grid.range_width, x_pxls);
+    //            printf("%d: px_diff=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
+    //                    px_diff.get(0),  px_diff.get(1),  px_diff.get(2),  px_diff.get(3), 
+    //                    px_diff.get(4),  px_diff.get(5),  px_diff.get(6),  px_diff.get(7),
+    //                    px_diff.get(8),  px_diff.get(9),  px_diff.get(10), px_diff.get(11), 
+    //                    px_diff.get(12), px_diff.get(13), px_diff.get(14), px_diff.get(15));
+
+    //            //aie::saturation_mode current_sat=aie::get_saturation();
+    //            //printf("CURRENT_SATURATION = %d\n", current_sat);
+
+    //            auto low_range_bins_float = aie::mul(px_diff, m_range_grid.inv_range_res).to_vector<float>(0);
+    //            printf("%d: low_range_bins_float=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
+    //                    low_range_bins_float.get(0),  low_range_bins_float.get(1),  low_range_bins_float.get(2),  low_range_bins_float.get(3), 
+    //                    low_range_bins_float.get(4),  low_range_bins_float.get(5),  low_range_bins_float.get(6),  low_range_bins_float.get(7),
+    //                    low_range_bins_float.get(8),  low_range_bins_float.get(9),  low_range_bins_float.get(10), low_range_bins_float.get(11), 
+    //                    low_range_bins_float.get(12), low_range_bins_float.get(13), low_range_bins_float.get(14), low_range_bins_float.get(15));
+
+    //            // TODO: This is actually rounding correctly...but I need it to floor round...
+    //            aie::vector<int32,16> low_range_bins = aie::to_fixed<int32>(low_range_bins_float);
+    //            printf("%d: low_range_bins=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
+    //                    low_range_bins.get(0),  low_range_bins.get(1),  low_range_bins.get(2),  low_range_bins.get(3), 
+    //                    low_range_bins.get(4),  low_range_bins.get(5),  low_range_bins.get(6),  low_range_bins.get(7),
+    //                    low_range_bins.get(8),  low_range_bins.get(9),  low_range_bins.get(10), low_range_bins.get(11), 
+    //                    low_range_bins.get(12), low_range_bins.get(13), low_range_bins.get(14), low_range_bins.get(15));
+
+    //            //low_range_bins = aie::sub(low_range_bins, fft_seg);
+    //            //auto high_range_bins = aie::add(low_range_bins, 1);
+
+    //            
+    //            //for (int i=0; i<16; i++) {
+    //            //    low_ph_data[i] = ph_data_iter[low_range_bins[i]];
+    //            //    high_ph_data[i] = ph_data_iter[low_range_bins[i]+1];
+    //            //    printf("ph_corr[%d] = {%f, %f}\n", i, ((cfloat)ph_corr[i]).real, ((cfloat)ph_corr[i]).imag);
+    //            //    printf("low_ph_data[%d] = {%f, %f}\n", i, ((cfloat)low_ph_data[i]).real, ((cfloat)low_ph_data[i]).imag);
+    //            //    printf("high_ph_data[%d] = {%f, %f}\n", i, ((cfloat)high_ph_data[i]).real, ((cfloat)high_ph_data[i]).imag);
+    //            //}
+
+    //            //y0+(x-x0)*((y1 - y0)/dr);
+    //            // Interpolation...HOW TO DO THIS
+    //            //y0+(x-x0)*((y1 - y0)/(x1-x0));
+    //            
+    //            //if (differ_range_mask.full()) {
+    //            //    auto img_vec = aie::mul(differ_range, ph_corr).to_vector<cfloat>(0);
+    //            //    aie::store_v(img+(y_idx*x_px_grid_len)+(x_idx*16), img_vec);
+    //            //}
+
+    //            //// Increment range bins to next segment
+    //            //range_bins = aie::add(dr, range_bins);
+    //            
+    //            // Increment X pixel segment
+    //            x_pxls = aie::add(x_pxls, x_px_inc);
+    //        }
+
+    //        // Reset X pixel segment
+    //        x_pxls = aie::load_v<16>(start_x_pxls);
+
+    //        // Increment Y pixel segment
+    //        y_pxls = aie::add(y_pxls, y_px_inc);
+    //    }
+    //}
+
+    ////img_out.release();
+//}
 
 //void phase_corr_kern(input_buffer<float, extents<2048>> &restrict x_ant_pos,
 //                     input_buffer<float, extents<2048>> &restrict y_ant_pos,
