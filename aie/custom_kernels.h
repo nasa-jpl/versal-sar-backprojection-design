@@ -13,21 +13,27 @@ using namespace adf;
 void cplx_conj_kern(input_buffer<TT_DATA, extents<2048>>& __restrict in, 
                     output_buffer<TT_DATA, extents<2048>>& __restrict out);
 
-void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos,
-                           input_buffer<float, extents<1>>& __restrict y_ant_pos,
-                           input_buffer<float, extents<1>>& __restrict z_ant_pos,
-                           input_buffer<float, extents<1>>& __restrict ref_range,
-                           output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_data_out);
+void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos_in,
+                           input_buffer<float, extents<1>>& __restrict y_ant_pos_in,
+                           input_buffer<float, extents<1>>& __restrict z_ant_pos_in,
+                           input_buffer<float, extents<1>>& __restrict ref_range_in,
+                           output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out);
 
 class Backprojection
 {
     public:
-        static constexpr float PI = 3.1415926535;
+        static constexpr float PI = 3.1415926535898;
+        static constexpr float INV_PI = 0.31830988618379;
+        static constexpr float NEG_INV_PI = -0.31830988618379;
+        static constexpr float TWO_PI = 6.2831853071796;
+        static constexpr float INV_TWO_PI = 0.15915494309189;
+        static constexpr float NEG_INV_TWO_PI = -0.15915494309189;
         static constexpr float C = 299792458.0;
 
         Backprojection(int id);
-        void backprojection_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_data,
-                                 input_buffer<TT_DATA, extents<2048>>& __restrict ph_data,
+        void backprojection_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+                                 input_buffer<TT_DATA, extents<2048>>& __restrict rc_in,
+                                 input_buffer<TT_DATA, extents<2048>>& __restrict xy_px_in,
                                  output_async_buffer<TT_DATA, extents<2048>>& __restrict img_out);
 
         void generate_pixel_grid(float x_st, float x_en, float y_st, float y_en, float x_grid_len, float y_grid_len);

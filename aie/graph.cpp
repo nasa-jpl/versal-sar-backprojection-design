@@ -183,9 +183,23 @@ int main(int argc, char ** argv) {
         ref_range_data_array[i] = 10158.399;
     }
 
-    TT_DATA* ph_data_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
+    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
     for(int i = 0; i < 8192; i++) {
-        ph_data_array[i] = (TT_DATA) {i, i};
+        rc_array[i] = (TT_DATA) {i, i};
+    }
+
+    TT_DATA* xy_px_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
+    const float C = 299792458.0;
+    float range_freq_step = 1471301.6;
+    int range_samples = 8192;
+    int half_range_samples = range_samples/2;
+    float min_freq = 9288080400.0;
+
+    float range_width = C/(2.0*range_freq_step);
+    float range_res = range_width/range_samples;
+
+    for(int i = 0; i < range_samples; i++) {
+        xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
     }
     
     TT_DATA* img_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
@@ -228,7 +242,8 @@ int main(int argc, char ** argv) {
             bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, PULSES*sizeof(float));
 
             for(int i=0; i<BP_SOLVERS; i++) {
-                bpGraph[inst].gmio_in_ph_data[i].gm2aie_nb(ph_data_array + i*2048, 2048*sizeof(TT_DATA));
+                bpGraph[inst].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
+                bpGraph[inst].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
                 bpGraph[inst].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
             }
         }

@@ -312,7 +312,8 @@ class BackProjectionGraph: public graph
         input_gmio gmio_in_ref_range;
 
         // I/O ports for backprojection kernel
-        input_gmio gmio_in_ph_data[BP_SOLVERS];
+        input_gmio gmio_in_rc[BP_SOLVERS];
+        input_gmio gmio_in_xy_px[BP_SOLVERS];
         output_gmio gmio_out_img[BP_SOLVERS];
 
         // RTP ports
@@ -346,7 +347,8 @@ class BackProjectionGraph: public graph
                 bp_km[i] = kernel::create_object<Backprojection>(i);
 
                 // Backprojection kernel ports
-                gmio_in_ph_data[i] = input_gmio::create("gmio_in_ph_data_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+                gmio_in_rc[i] = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+                gmio_in_xy_px[i] = input_gmio::create("gmio_in_xy_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
 
                 // Multicasting AIE to AIE connection
@@ -362,7 +364,8 @@ class BackProjectionGraph: public graph
                 int bp_fftshift_id = i-(BP_SOLVERS/2);
                 if (bp_fftshift_id < 0)
                     bp_fftshift_id+=BP_SOLVERS;
-                connect(gmio_in_ph_data[i].out[0], bp_km[bp_fftshift_id].in[1]);
+                connect(gmio_in_rc[i].out[0], bp_km[bp_fftshift_id].in[1]);
+                connect(gmio_in_xy_px[i].out[0], bp_km[bp_fftshift_id].in[2]);
                 connect(bp_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
             }
         
