@@ -171,7 +171,7 @@ int main(int argc, char ** argv) {
     //    }
     //}
 
-    const int PULSES = 1;
+    const int PULSES = 2;
     float* x_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
     float* y_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
     float* z_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
@@ -232,8 +232,8 @@ int main(int argc, char ** argv) {
         for(int inst=0; inst<INSTANCES; inst++) {
             printf("\nPERFORM BACKPROJECTION (ITER = %d) (INST = %d)\n", iter, inst);
 
-            // Set up AIE graph to run 1 time
-            bpGraph[inst].run(1);
+            // Set up AIE graph to run PULSES time(s)
+            bpGraph[inst].run(PULSES);
 
             // Pass in data to AIE
             bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, PULSES*sizeof(float));
@@ -255,10 +255,48 @@ int main(int argc, char ** argv) {
             }
         }
         //TODO: DEBUG
-        for(int i=0; i<8192; i+=128) {
+        for(int i=0; i<32; i++) {
             printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }
 
+        for(int i=2048; i<2048+32; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        }
+
+        for(int i=4096; i<4096+32; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        }
+
+        for(int i=6144; i<6144+32; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        }
+
+        for(int i=0; i<BP_SOLVERS; i++) {
+            bpGraph[0].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
+            bpGraph[0].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
+            bpGraph[0].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
+        }
+        for(int inst=0; inst<INSTANCES; inst++) {
+            for(int bp=0; bp<BP_SOLVERS; bp++) {
+                bpGraph[inst].gmio_out_img[bp].wait();
+            }
+        }
+
+        for(int i=0; i<32; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        }
+
+        for(int i=2048; i<2048+32; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        }
+
+        for(int i=4096; i<4096+32; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        }
+
+        for(int i=6144; i<6144+32; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        }
 
         //for(int inst=0; inst<INSTANCES; inst++) {
         //    printf("\nPERFORM FFT (ITER = %d) (INST = %d)\n", iter, inst);

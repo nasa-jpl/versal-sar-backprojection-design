@@ -353,21 +353,31 @@ class BackProjectionGraph: public graph
 
                 // Multicasting AIE to AIE connection
                 connect(sts_km.out[0], bp_km[i].in[0]);
+                
+                // Backprojection GMIO in connection
+                connect(gmio_in_rc[i].out[0], bp_km[i].in[1]);
+                connect(gmio_in_xy_px[i].out[0], bp_km[i].in[2]);
+
+                // Backprojection GMIO out connection
+                connect(bp_km[i].out[0], gmio_out_img[i].in[0]);
 
                 // Backprojection source and ratio
                 source(bp_km[i]) = "backprojection.cc";
                 runtime<ratio>(bp_km[i]) = 1.0;
             }
 
-            for (int i=0; i<BP_SOLVERS; i++) {
-                // Backprojection GMIO connections accounting for fftshifting
-                int bp_fftshift_id = i-(BP_SOLVERS/2);
-                if (bp_fftshift_id < 0)
-                    bp_fftshift_id+=BP_SOLVERS;
-                connect(gmio_in_rc[i].out[0], bp_km[bp_fftshift_id].in[1]);
-                connect(gmio_in_xy_px[i].out[0], bp_km[bp_fftshift_id].in[2]);
-                connect(bp_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
-            }
+            //for (int i=0; i<BP_SOLVERS; i++) {
+            //    connect(gmio_in_rc[i].out[0], bp_km[(BP_SOLVERS-1)-i].in[1]);
+            //}
+            //for (int i=0; i<BP_SOLVERS; i++) {
+            //    // Backprojection GMIO connections accounting for fftshifting
+            //    int bp_fftshift_id = i-(BP_SOLVERS/2);
+            //    if (bp_fftshift_id < 0)
+            //        bp_fftshift_id+=BP_SOLVERS;
+            //    connect(gmio_in_rc[i].out[0], bp_km[bp_fftshift_id].in[1]);
+            //    //connect(gmio_in_xy_px[i].out[0], bp_km[bp_fftshift_id].in[2]);
+            //    //connect(bp_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
+            //}
         
             // RTP Connections
             //connect<parameter>(range_freq_step[0], bp_km[0].in[2]);
