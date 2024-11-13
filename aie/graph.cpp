@@ -241,16 +241,18 @@ int main(int argc, char ** argv) {
             bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, PULSES*sizeof(float));
             bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, PULSES*sizeof(float));
 
-            for(int i=0; i<BP_SOLVERS; i++) {
-                bpGraph[inst].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
+            for(int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
                 bpGraph[inst].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
+            }
+            for(int i=0; i<IMG_SOLVERS; i++) {
+                bpGraph[inst].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
                 bpGraph[inst].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
             }
         }
 
         // Block until AIE finishes
         for(int inst=0; inst<INSTANCES; inst++) {
-            for(int bp=0; bp<BP_SOLVERS; bp++) {
+            for(int bp=0; bp<IMG_SOLVERS; bp++) {
                 bpGraph[inst].gmio_out_img[bp].wait();
             }
         }
@@ -271,13 +273,17 @@ int main(int argc, char ** argv) {
             printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }
 
-        for(int i=0; i<BP_SOLVERS; i++) {
-            bpGraph[0].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
+        for(int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
             bpGraph[0].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
+        }
+
+        for(int i=0; i<IMG_SOLVERS; i++) {
+            bpGraph[0].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
             bpGraph[0].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
         }
+
         for(int inst=0; inst<INSTANCES; inst++) {
-            for(int bp=0; bp<BP_SOLVERS; bp++) {
+            for(int bp=0; bp<IMG_SOLVERS; bp++) {
                 bpGraph[inst].gmio_out_img[bp].wait();
             }
         }

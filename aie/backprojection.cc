@@ -28,7 +28,130 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
     *st_out_iter++ = *ref_range_in_iter++;
 }
 
-Backprojection::Backprojection(int id)
+void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+                             input_buffer<TT_DATA, extents<2048>>& __restrict xy_px_in,
+                             output_pktstream *dr_out) {
+    
+    // Get packet ID for routing from specific index. Packet ID is automatically
+    // given at compile time and must be fetched indirectly via an index.
+    uint32 id = getPacketid(dr_out, 0);
+    printf("ID: %d\n", id);
+
+    // Generate header for output stream
+    const uint32 pkt_type = 0;
+    //writeHeader(dr_out, pkt_type, 0);
+
+    // Create iterators from input and output buffers
+    auto st_in_vec_iter = aie::begin_vector<ST_ELEMENTS>(slowtime_in);
+    auto xy_in_iter = aie::begin_vector<16>(xy_px_in);
+
+    // Extract antenna position and range to scene center from slow time data
+    auto st_in_vec = *st_in_vec_iter++;
+    float x_ant = st_in_vec[0];
+    float y_ant = st_in_vec[1];
+    float z_ant = st_in_vec[2];
+    float r0 = st_in_vec[3];
+
+    // Initialize radar parameters
+    float range_freq_step = 1471301.6;
+    float range_samples = 8192;
+    float min_freq = 9288080400.0;
+    float C = 299792458.0;
+    float range_width = C/(2.0*range_freq_step);
+    float range_res = range_width/range_samples;
+    float inv_range_res = 1.0/range_res;
+
+    // Precalculate z_diff_sq
+    auto z_diff_sq = z_ant*z_ant;
+    
+    //const uint32 ITER = 2048/16;
+    const uint32 ITER = 2;
+    int route_id = -1;
+
+    //writeHeader(dr_out, pkt_type, 3);
+    for(int xy_idx=0; xy_idx < ITER; xy_idx++) chess_prepare_for_pipelining {
+        auto xy_px_vec = *xy_in_iter++;
+        auto x_pxls_vec = aie::real(xy_px_vec);
+        auto y_pxls_vec = aie::imag(xy_px_vec);
+        
+        // Calculate differential range for pixel segments
+        auto x_vec = aie::sub(x_ant, x_pxls_vec);
+        auto x_diff_sq_acc = aie::mul_square(x_vec);
+
+        auto y_vec = aie::sub(y_ant, y_pxls_vec);
+        auto y_diff_sq_acc = aie::mul_square(y_vec);
+
+        auto xy_add_vec = aie::add(x_diff_sq_acc, z_diff_sq).to_vector<float>(0);
+        auto xyz_add_acc = aie::add(y_diff_sq_acc, xy_add_vec);
+
+        auto xyz_sqrt_acc = aie::sqrt(xyz_add_acc);
+
+        auto differ_range_vec = aie::sub(xyz_sqrt_acc, r0).to_vector<float>(0);
+        printf("dr %d: differ_range_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
+                differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
+                differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
+                differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
+                differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15));
+
+        // Calculate the approximate index for differ_range_vec in the equally spaced range grid
+        auto px_idx_vec = aie::mul(inv_range_res, differ_range_vec).to_vector<float>(0);
+        printf("dr %d: px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
+                px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3), 
+                px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
+                px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11), 
+                px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
+        
+        auto seg4_mask = aie::ge(px_idx_vec, 2048.0f);
+        auto seg3_mask = aie::ge(px_idx_vec, 0.0f);
+        auto seg2_mask = aie::ge(px_idx_vec, -2048.0f);
+        auto seg1_mask = aie::ge(px_idx_vec, -4096.0f);
+        
+        if (seg4_mask.full() && route_id != 3) {
+            printf("dr %d: Route ID (seg 4): %d\n", id, route_id);
+            if (route_id != -1)
+                writeincr(dr_out, 0, true); // Assert TLAST
+            route_id = 3;
+            writeHeader(dr_out, pkt_type, route_id);
+        }
+        else if (seg3_mask.full() && route_id != 2) {
+            printf("dr %d: Route ID (seg 3): %d\n", id, route_id);
+            if (route_id != -1)
+                writeincr(dr_out, 0, true); // Assert TLAST
+            route_id = 2;
+            writeHeader(dr_out, pkt_type, route_id);
+        }
+        else if (seg2_mask.full() && route_id != 1) {
+            printf("dr %d: Route ID (seg 2): %d\n", id, route_id);
+            if (route_id != -1)
+                writeincr(dr_out, 0, true); // Assert TLAST
+            route_id = 1;
+            writeHeader(dr_out, pkt_type, route_id);
+        }
+        else if (seg1_mask.full() && route_id != 0) {
+            printf("dr %d: Route ID (seg 1): %d\n", id, route_id);
+            if (route_id != -1)
+                writeincr(dr_out, 0, true); // Assert TLAST
+            route_id = 0;
+            writeHeader(dr_out, pkt_type, route_id);
+        }
+        else {
+            printf("dr %d: WARN: px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
+                    px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3), 
+                    px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
+                    px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11), 
+                    px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
+        }
+        
+        if (route_id == 0) {
+            for(int i=0; i<16; i++) {
+                printf("dr %d: routeid: %d | %f\n", id, route_id, differ_range_vec.get(i));
+                writeincr(dr_out, differ_range_vec.get(i));
+            }
+        }
+    }
+}
+
+ImgReconstruct::ImgReconstruct(int id)
 : m_id(id)
 , m_iter(0)
 {
@@ -40,7 +163,7 @@ Backprojection::Backprojection(int id)
     }
 }
 
-void Backprojection::init_radar_params(float range_freq_step, int range_samples, float min_freq)
+void ImgReconstruct::init_radar_params(float range_freq_step, int range_samples, float min_freq)
 {
     m_radar_params.range_freq_step = range_freq_step;
     m_radar_params.range_samples = range_samples;
@@ -51,7 +174,7 @@ void Backprojection::init_radar_params(float range_freq_step, int range_samples,
     //m_radar_params.ph_corr_coef = (2*PI*min_freq)/C; 
 }
 
-void Backprojection::init_range_grid()
+void ImgReconstruct::init_range_grid()
 {
     m_range_grid.range_width = C/(2.0*m_radar_params.range_freq_step);
     m_range_grid.range_res = m_range_grid.range_width/m_radar_params.range_samples;
@@ -73,7 +196,7 @@ void Backprojection::init_range_grid()
     //}
 }
 
-void Backprojection::print_float(const char *str, aie::vector<float,16> data) {
+void ImgReconstruct::print_float(const char *str, aie::vector<float,16> data) {
     printf("%d: %s=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, str,
            data.get(0),  data.get(1),  data.get(2),  data.get(3), 
            data.get(4),  data.get(5),  data.get(6),  data.get(7),
@@ -82,7 +205,7 @@ void Backprojection::print_float(const char *str, aie::vector<float,16> data) {
 
 }
 
-void Backprojection::print_int32(const char *str, aie::vector<int32,16> data) {
+void ImgReconstruct::print_int32(const char *str, aie::vector<int32,16> data) {
     printf("%d: %s=%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", m_id, str,
            data.get(0),  data.get(1),  data.get(2),  data.get(3), 
            data.get(4),  data.get(5),  data.get(6),  data.get(7),
@@ -91,7 +214,7 @@ void Backprojection::print_int32(const char *str, aie::vector<int32,16> data) {
 
 }
 
-//void Backprojection::init_pixel_grid(float x_st, float x_en, int x_len, float y_st, float y_en, int y_len)
+//void ImgReconstruct::init_pixel_grid(float x_st, float x_en, int x_len, float y_st, float y_en, int y_len)
 //{
 //    m_px_grid.x_st = x_st;
 //    m_px_grid.x_en = x_en;
@@ -103,7 +226,7 @@ void Backprojection::print_int32(const char *str, aie::vector<int32,16> data) {
 //    m_px_grid.y_res = (y_en - y_st) / (y_len - 1);
 //}
 //
-//void Backprojection::init_pixel_segment()
+//void ImgReconstruct::init_pixel_segment()
 //{
 //    m_seg.range_st = ((m_range_grid.range_width/BP_SOLVERS)*m_id) - m_range_grid.range_width/2;
 //    m_seg.range_en = ((m_range_grid.range_width/BP_SOLVERS)*(m_id+1)) - m_range_grid.range_width/2;
@@ -122,30 +245,38 @@ void Backprojection::print_int32(const char *str, aie::vector<int32,16> data) {
 //    }
 //}
 
-void Backprojection::backprojection_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                         input_circular_buffer<TT_DATA, extents<2048>>& __restrict rc_in,
-                                         input_buffer<TT_DATA, extents<2048>>& __restrict xy_px_in,
-                                         output_async_buffer<TT_DATA, extents<2048>>& __restrict img_out) {
+void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents<2048>>& __restrict rc_in,
+                                          input_pktstream *dr_in,
+                                          output_async_buffer<TT_DATA, extents<2048>>& __restrict img_out) {
+    printf("%d: HEREEEEEEEEEEEEEE\n", m_id);
     // Lock img_out buffer
     img_out.acquire();
 
-    // Extract antenna position and range to scene center from slow time data
-    auto st_in_vec_iter = aie::begin_vector<ST_ELEMENTS>(slowtime_in);
-    auto st_in_vec = *st_in_vec_iter++;
+    // Read header from stream and discard
+    uint32 tmp = readincr(dr_in);
+    printf("%d: YOOOOOO: %d\n", m_id, tmp);
 
-    float x_ant = st_in_vec[0];
-    float y_ant = st_in_vec[1];
-    float z_ant = st_in_vec[2];
-    float r0 = st_in_vec[3];
+    // Create iterators from input and output buffers
+    auto rc_in_iter = aie::begin_random_circular(rc_in); // Compressed range lines in time domain
+    auto img_out_iter = aie::begin_vector<16>(img_out);
+
+    //// Extract antenna position and range to scene center from slow time data
+    //auto st_in_vec_iter = aie::begin_vector<ST_ELEMENTS>(slowtime_in);
+    //auto st_in_vec = *st_in_vec_iter++;
+
+    //float x_ant = st_in_vec[0];
+    //float y_ant = st_in_vec[1];
+    //float z_ant = st_in_vec[2];
+    //float r0 = st_in_vec[3];
 
     // Ranged compressed data in time domain (compressed range lines)
-    auto rc_in_iter = aie::begin_random_circular(rc_in);
+    //auto rc_in_iter = aie::begin_random_circular(rc_in);
 
     // X and Y target pixels
-    auto xy_in_iter = aie::begin_vector<16>(xy_px_in);
+    //auto xy_in_iter = aie::begin_vector<16>(xy_px_in);
 
     // Image output
-    auto img_out_iter = aie::begin_vector<16>(img_out);
+    //auto img_out_iter = aie::begin_vector<16>(img_out);
     
     // Initialize radar parameters
     init_radar_params(1471301.6, 8192, 9288080400.0);
@@ -198,49 +329,23 @@ void Backprojection::backprojection_kern(input_buffer<float, extents<ST_ELEMENTS
     //alignas(aie::vector_decl_align) TT_DATA img[m_px_grid.x_len*m_px_grid.y_len];
     
     // Precalculate z_diff_sq
-    auto z_diff_sq = z_ant*z_ant;
+    //auto z_diff_sq = z_ant*z_ant;
+
+
+    aie::vector<int32,16> differ_range_int_vec;
 
     //for(int xy_idx=0; xy_idx < 2048/16; xy_idx++) chess_prepare_for_pipelining {
     for(int xy_idx=0; xy_idx < 2; xy_idx++) chess_prepare_for_pipelining {
-        printf("\n%d: ITERATION: %d\n", m_id, xy_idx);
-        
-        auto xy_px_vec = *xy_in_iter++;
-        auto x_pxls_vec = aie::real(xy_px_vec);
-        auto y_pxls_vec = aie::imag(xy_px_vec);
-        
-        //aie::print(x_pxls, true, "x_pxls=");
-        //printf("%d: x_pxls=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-        //        x_pxls.get(0),  x_pxls.get(1),  x_pxls.get(2),  x_pxls.get(3), 
-        //        x_pxls.get(4),  x_pxls.get(5),  x_pxls.get(6),  x_pxls.get(7),
-        //        x_pxls.get(8),  x_pxls.get(9),  x_pxls.get(10), x_pxls.get(11), 
-        //        x_pxls.get(12), x_pxls.get(13), x_pxls.get(14), x_pxls.get(15));
+        //printf("\n%d: ITERATION: %d\n", m_id, xy_idx);
 
-        ////aie::print(y_pxls, true, "y_pxls=");
-        //printf("%d: y_pxls=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-        //        y_pxls.get(0),  y_pxls.get(1),  y_pxls.get(2),  y_pxls.get(3), 
-        //        y_pxls.get(4),  y_pxls.get(5),  y_pxls.get(6),  y_pxls.get(7),
-        //        y_pxls.get(8),  y_pxls.get(9),  y_pxls.get(10), y_pxls.get(11), 
-        //        y_pxls.get(12), y_pxls.get(13), y_pxls.get(14), y_pxls.get(15));
-
-        // Calculate differential range for pixel segments
-        auto x_vec = aie::sub(x_ant, x_pxls_vec);
-        auto x_diff_sq_acc = aie::mul_square(x_vec);
-
-        auto y_vec = aie::sub(y_ant, y_pxls_vec);
-        auto y_diff_sq_acc = aie::mul_square(y_vec);
-
-        auto xy_add_vec = aie::add(x_diff_sq_acc, z_diff_sq).to_vector<float>(0);
-        auto xyz_add_acc = aie::add(y_diff_sq_acc, xy_add_vec);
-
-        auto xyz_sqrt_acc = aie::sqrt(xyz_add_acc);
-
-        auto differ_range_vec = aie::sub(xyz_sqrt_acc, r0).to_vector<float>(0);
+        // Extract differential range vector
+        for(int i=0; i < 16; i++) chess_prepare_for_pipelining {
+            differ_range_int_vec.set(readincr(dr_in), i);
+        }
+        aie::vector<float,16> differ_range_vec = differ_range_int_vec.cast_to<float>();
         print_float("differ_range_vec", differ_range_vec);
-        //printf("%d: differ_range_vec=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-        //        differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
-        //        differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
-        //        differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
-        //        differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15));
+        
+        //auto differ_range_vec = *dr_in_iter++;
 
         // Calculate phase correction for image
         auto ph_corr_angle_vec = aie::mul(m_radar_params.ph_corr_coef, differ_range_vec).to_vector<float>(0);
@@ -311,7 +416,9 @@ void Backprojection::backprojection_kern(input_buffer<float, extents<ST_ELEMENTS
         auto px_idx_acc = aie::mul(m_range_grid.inv_range_res, differ_range_vec);
         
         // Shift indices so they are not negative
-        px_idx_acc = aie::add(px_idx_acc, 4096.0f);//-m_range_grid.seg_offset);
+        //float seg_offset = (float)(2048*(m_id-1));
+        //printf("%d: seg_offset: %f\n", m_id, seg_offset);
+        px_idx_acc = aie::add(px_idx_acc, 4096.0f-m_range_grid.seg_offset);
         //if (m_id == 0)
         //    px_idx_acc = aie::sub(px_idx_acc, 6144.0f);
         //else if (m_id == 1)

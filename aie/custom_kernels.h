@@ -19,7 +19,11 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
                            input_buffer<float, extents<1>>& __restrict ref_range_in,
                            output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out);
 
-class Backprojection
+void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+                             input_buffer<TT_DATA, extents<2048>>& __restrict xy_px_in,
+                             output_pktstream *dr_out);
+
+class ImgReconstruct
 {
     public:
         static constexpr float PI = 3.1415926535898;
@@ -28,16 +32,15 @@ class Backprojection
         static constexpr float C = 299792458.0;
         static constexpr int ACCUM_PULSES = 2;
 
-        Backprojection(int id);
-        void backprojection_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                 input_circular_buffer<TT_DATA, extents<2048>>& __restrict rc_in,
-                                 input_buffer<TT_DATA, extents<2048>>& __restrict xy_px_in,
-                                 output_async_buffer<TT_DATA, extents<2048>>& __restrict img_out);
+        ImgReconstruct(int id);
+        void img_reconstruct_kern(input_circular_buffer<TT_DATA, extents<2048>>& __restrict rc_in,
+                                  input_pktstream *dr_in,
+                                  output_async_buffer<TT_DATA, extents<2048>>& __restrict img_out);
 
         void generate_pixel_grid(float x_st, float x_en, float y_st, float y_en, float x_grid_len, float y_grid_len);
         static void registerKernelClass()
         { 
-            REGISTER_FUNCTION(Backprojection::backprojection_kern);
+            REGISTER_FUNCTION(ImgReconstruct::img_reconstruct_kern);
         }
 
     private:

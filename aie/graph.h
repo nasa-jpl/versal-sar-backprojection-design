@@ -301,90 +301,171 @@ class CplxConjGraph: public graph
 class BackProjectionGraph: public graph
 {
     private:
+
+        //***** KERNEL OBJECTS *****//
+
+        // Slow time splicer kernel module
         kernel sts_km;
-        kernel bp_km[BP_SOLVERS];
+
+        // Differential range kernel module
+        kernel dr_km[DIFFER_RANGE_SOLVERS];
+
+        // Image reconstruction kernel module
+        kernel img_rec_km[IMG_SOLVERS];
+
+        //***** PACKET SWITCHING OBJECTS *****//
+        pktmerge<4> mg;
+        pktsplit<4> sp;
 
     public:
-        // I/O ports for slow time splicer kernel
+        //***** GMIO PORT OBJECTS *****//
+
+        // Slow time splicer GMIO ports
         input_gmio gmio_in_x_ant_pos;
         input_gmio gmio_in_y_ant_pos;
         input_gmio gmio_in_z_ant_pos;
         input_gmio gmio_in_ref_range;
 
-        // I/O ports for backprojection kernel
-        input_gmio gmio_in_rc[BP_SOLVERS];
-        input_gmio gmio_in_xy_px[BP_SOLVERS];
-        output_gmio gmio_out_img[BP_SOLVERS];
+        // Differential range GMIO ports
+        input_gmio gmio_in_xy_px[DIFFER_RANGE_SOLVERS];
 
-        // RTP ports
+        // Image reconstruction GMIO ports
+        input_gmio gmio_in_rc[IMG_SOLVERS];
+        output_gmio gmio_out_img[IMG_SOLVERS];
+            
+
+        //***** RTP PORT OBJECTS *****//
         //input_port range_freq_step[4];
 
         BackProjectionGraph() {
-            // Create slow time splicer kernel
+
+            //***** KERNELS *****//
+
+            // Slow time splicer kernel
             sts_km = kernel::create(slowtime_splicer_kern);
+
+            // Instantiating ImgReconstruct allows for keeping track of instances across 
+            // instantiations. This gives each backprojection kernel instance an ID it 
+            // can reference to do something unique based on its ID.
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                img_rec_km[i] = kernel::create_object<ImgReconstruct>(i);
+            }
+
+            // Differential range kernel
+            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
+                dr_km[i] = kernel::create(differential_range_kern);
+            }
             
-            // Slow time splicer kernel ports
+            //***** PACKET SWITCHING OBJECTS *****//
+            
+            // Differential range merger
+            mg = pktmerge<4>::create();
+
+            // Differential range splitter
+            sp = pktsplit<4>::create();
+
+
+            //***** GMIO PORTS *****//
+            
+            // Slow time splicer GMIO ports
             gmio_in_x_ant_pos = input_gmio::create("gmio_in_x_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
             gmio_in_y_ant_pos = input_gmio::create("gmio_in_y_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
             gmio_in_z_ant_pos = input_gmio::create("gmio_in_z_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
             gmio_in_ref_range = input_gmio::create("gmio_in_ref_range_" + std::to_string(bp_graph_insts), 256, 1000);
+
+            // Differential range GMIO ports
+            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
+                gmio_in_xy_px[i] = input_gmio::create("gmio_in_xy_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+            }
+
+            // Image Reconstruct GMIO ports
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                gmio_in_rc[i] = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+                gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+            }
+
+
+            //***** GMIO CONNECTIONS *****//
 
             // Slow time splicer GMIO connections
             connect(gmio_in_x_ant_pos.out[0], sts_km.in[0]);
             connect(gmio_in_y_ant_pos.out[0], sts_km.in[1]);
             connect(gmio_in_z_ant_pos.out[0], sts_km.in[2]);
             connect(gmio_in_ref_range.out[0], sts_km.in[3]);
-            
-            // Slow time splicer source and ratio
-            source(sts_km) = "backprojection.cc";
-            runtime<ratio>(sts_km) = 1.0;
 
-            for (int i=0; i<BP_SOLVERS; i++) {
-                // Create backprojection kernel. Instantiating Backprojection allows
-                // for keeping track of instances across instantiations. This gives
-                // each backprojection kernel instance an ID it can refrence to do
-                // something unique based on its ID.
-                bp_km[i] = kernel::create_object<Backprojection>(i);
 
-                // Backprojection kernel ports
-                gmio_in_rc[i] = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                gmio_in_xy_px[i] = input_gmio::create("gmio_in_xy_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
-
-                // Multicasting AIE to AIE connection
-                connect(sts_km.out[0], bp_km[i].in[0]);
-                
-                // Backprojection GMIO in connection
-                connect(gmio_in_rc[i].out[0], bp_km[i].in[1]);
-                connect(gmio_in_xy_px[i].out[0], bp_km[i].in[2]);
-
-                // Backprojection GMIO out connection
-                connect(bp_km[i].out[0], gmio_out_img[i].in[0]);
-
-                // Backprojection source and ratio
-                source(bp_km[i]) = "backprojection.cc";
-                runtime<ratio>(bp_km[i]) = 1.0;
+            // Differential range GMIO connections
+            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
+                connect(gmio_in_xy_px[i].out[0], dr_km[i].in[1]);
             }
 
+            // Image reconstruct GMIO connections
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                connect(gmio_in_rc[i].out[0], img_rec_km[i].in[0]);
+                connect(img_rec_km[i].out[0], gmio_out_img[i].in[0]);
+            }
+
+
+            //***** AIE TO AIE CONNECTIONS *****//
+
+            // Slow time splicer to differential range
+            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
+                connect(sts_km.out[0], dr_km[i].in[0]);
+            }
+            
+            // Differential range to merge packet switcher
+            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
+                connect(dr_km[i].out[0], mg.in[i]);
+            }
+
+            // Split packet switcher to image reconstruction
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                connect(sp.out[i], img_rec_km[i].in[1]);
+            }
+    
+            // Merge packet switcher to split packet switcher
+            // (This creates a router within the AIE to route packets based
+            // on packet ID in the stream header)
+            connect(mg.out[0], sp.in[0]);
+            
+
+            //***** SOURCE FILES *****//
+
+            source(sts_km) = "backprojection.cc";
+            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++)
+                source(dr_km[i]) = "backprojection.cc";
+            for (int i=0; i<IMG_SOLVERS; i++)
+                source(img_rec_km[i]) = "backprojection.cc";
+
+
+            //***** RUNTIME RATIOS *****//
+
+            runtime<ratio>(sts_km) = 1.0;
+            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++)
+                runtime<ratio>(dr_km[i]) = 1.0;
+            for (int i=0; i<IMG_SOLVERS; i++)
+                runtime<ratio>(img_rec_km[i]) = 1.0;
+
+
+            ++bp_graph_insts;
+
             //for (int i=0; i<BP_SOLVERS; i++) {
-            //    connect(gmio_in_rc[i].out[0], bp_km[(BP_SOLVERS-1)-i].in[1]);
+            //    connect(gmio_in_rc[i].out[0], img_rec_km[(BP_SOLVERS-1)-i].in[1]);
             //}
             //for (int i=0; i<BP_SOLVERS; i++) {
-            //    // Backprojection GMIO connections accounting for fftshifting
+            //    // ImgReconstruct GMIO connections accounting for fftshifting
             //    int bp_fftshift_id = i-(BP_SOLVERS/2);
             //    if (bp_fftshift_id < 0)
             //        bp_fftshift_id+=BP_SOLVERS;
-            //    connect(gmio_in_rc[i].out[0], bp_km[bp_fftshift_id].in[1]);
-            //    //connect(gmio_in_xy_px[i].out[0], bp_km[bp_fftshift_id].in[2]);
-            //    //connect(bp_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
+            //    connect(gmio_in_rc[i].out[0], img_rec_km[bp_fftshift_id].in[1]);
+            //    //connect(gmio_in_xy_px[i].out[0], img_rec_km[bp_fftshift_id].in[2]);
+            //    //connect(img_rec_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
             //}
         
             // RTP Connections
-            //connect<parameter>(range_freq_step[0], bp_km[0].in[2]);
-            //connect<parameter>(range_freq_step[1], bp_km[1].in[2]);
-            //connect<parameter>(range_freq_step[2], bp_km[2].in[2]);
-            //connect<parameter>(range_freq_step[3], bp_km[3].in[2]);
-
-            ++bp_graph_insts;
+            //connect<parameter>(range_freq_step[0], img_rec_km[0].in[2]);
+            //connect<parameter>(range_freq_step[1], img_rec_km[1].in[2]);
+            //connect<parameter>(range_freq_step[2], img_rec_km[2].in[2]);
+            //connect<parameter>(range_freq_step[3], img_rec_km[3].in[2]);
         }
 };
