@@ -315,7 +315,7 @@ class BackProjectionGraph: public graph
 
         //***** PACKET SWITCHING OBJECTS *****//
         pktmerge<4> mg;
-        pktsplit<4> sp;
+        //pktsplit<4> sp;
 
     public:
         //***** GMIO PORT OBJECTS *****//
@@ -362,7 +362,7 @@ class BackProjectionGraph: public graph
             mg = pktmerge<4>::create();
 
             // Differential range splitter
-            sp = pktsplit<4>::create();
+            //sp = pktsplit<4>::create();
 
 
             //***** GMIO PORTS *****//
@@ -418,15 +418,19 @@ class BackProjectionGraph: public graph
                 connect(dr_km[i].out[0], mg.in[i]);
             }
 
-            // Split packet switcher to image reconstruction
-            for (int i=0; i<IMG_SOLVERS; i++) {
-                connect(sp.out[i], img_rec_km[i].in[1]);
-            }
+            //// Split packet switcher to image reconstruction
+            //for (int i=0; i<IMG_SOLVERS; i++) {
+            //    connect(sp.out[i], img_rec_km[i].in[1]);
+            //}
     
-            // Merge packet switcher to split packet switcher
-            // (This creates a router within the AIE to route packets based
-            // on packet ID in the stream header)
-            connect(mg.out[0], sp.in[0]);
+            //// Merge packet switcher to split packet switcher
+            //// (This creates a router within the AIE to route packets based
+            //// on packet ID in the stream header)
+            //connect(mg.out[0], sp.in[0]);
+
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                connect(mg.out[0], img_rec_km[i].in[1]);
+            }
             
 
             //***** SOURCE FILES *****//

@@ -38,7 +38,7 @@ void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restri
     printf("ID: %d\n", id);
 
     // Generate header for output stream
-    const uint32 pkt_type = 0;
+    int pkt_type = -1;
     //writeHeader(dr_out, pkt_type, 0);
 
     // Create iterators from input and output buffers
@@ -66,7 +66,6 @@ void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restri
     
     //const uint32 ITER = 2048/16;
     const uint32 ITER = 2;
-    int route_id = -1;
 
     //writeHeader(dr_out, pkt_type, 3);
     for(int xy_idx=0; xy_idx < ITER; xy_idx++) chess_prepare_for_pipelining {
@@ -106,33 +105,33 @@ void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restri
         auto seg2_mask = aie::ge(px_idx_vec, -2048.0f);
         auto seg1_mask = aie::ge(px_idx_vec, -4096.0f);
         
-        if (seg4_mask.full() && route_id != 3) {
-            printf("dr %d: Route ID (seg 4): %d\n", id, route_id);
-            if (route_id != -1)
+        if (seg4_mask.full() && pkt_type != 3) {
+            printf("dr %d: pkt_type (seg 4): %d\n", id, pkt_type);
+            if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
-            route_id = 3;
-            writeHeader(dr_out, pkt_type, route_id);
+            pkt_type = 3;
+            writeHeader(dr_out, pkt_type, id);
         }
-        else if (seg3_mask.full() && route_id != 2) {
-            printf("dr %d: Route ID (seg 3): %d\n", id, route_id);
-            if (route_id != -1)
+        else if (seg3_mask.full() && pkt_type != 2) {
+            printf("dr %d: pkt_type (seg 3): %d\n", id, pkt_type);
+            if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
-            route_id = 2;
-            writeHeader(dr_out, pkt_type, route_id);
+            pkt_type = 2;
+            writeHeader(dr_out, pkt_type, id);
         }
-        else if (seg2_mask.full() && route_id != 1) {
-            printf("dr %d: Route ID (seg 2): %d\n", id, route_id);
-            if (route_id != -1)
+        else if (seg2_mask.full() && pkt_type != 1) {
+            printf("dr %d: pkt_type (seg 2): %d\n", id, pkt_type);
+            if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
-            route_id = 1;
-            writeHeader(dr_out, pkt_type, route_id);
+            pkt_type = 1;
+            writeHeader(dr_out, pkt_type, id);
         }
-        else if (seg1_mask.full() && route_id != 0) {
-            printf("dr %d: Route ID (seg 1): %d\n", id, route_id);
-            if (route_id != -1)
+        else if (seg1_mask.full() && pkt_type != 0) {
+            printf("dr %d: pkt_type (seg 1): %d\n", id, pkt_type);
+            if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
-            route_id = 0;
-            writeHeader(dr_out, pkt_type, route_id);
+            pkt_type = 0;
+            writeHeader(dr_out, pkt_type, id);
         }
         else {
             printf("dr %d: WARN: px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
@@ -142,9 +141,9 @@ void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restri
                     px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
         }
         
-        if (route_id == 0) {
+        if (pkt_type == 0) {
             for(int i=0; i<16; i++) {
-                printf("dr %d: routeid: %d | %f\n", id, route_id, differ_range_vec.get(i));
+                printf("dr %d: pkt_type: %d | %f\n", id, pkt_type, differ_range_vec.get(i));
                 writeincr(dr_out, differ_range_vec.get(i));
             }
         }
@@ -340,6 +339,7 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
 
         // Extract differential range vector
         for(int i=0; i < 16; i++) chess_prepare_for_pipelining {
+            printf("%d: here\n", m_id);
             differ_range_int_vec.set(readincr(dr_in), i);
         }
         aie::vector<float,16> differ_range_vec = differ_range_int_vec.cast_to<float>();
