@@ -24,7 +24,7 @@
 //#define TP_POINT_SIZE 8192
 //#define MAT_ROWS 11539
 
-#define TP_POINT_SIZE 128
+#define TP_POINT_SIZE 64
 #define MAT_ROWS 2
 #define MAT_COLS TP_POINT_SIZE
 //#define TMPL_MAT_ROWS TP_POINT_SIZE/8
@@ -213,8 +213,11 @@
 
 // BACKPROJECTION VARIABLES
 
-// Number of BP kernels each taking chunks of the range lines over slow time
-#define BP_SOLVERS 4
+// Number of differential range solvers
+#define DIFFER_RANGE_SOLVERS 4
+
+// Number of image reconstruction solvers
+#define IMG_SOLVERS 4
 
 // Number of slow time elements to process:
 // X position of antenna 
