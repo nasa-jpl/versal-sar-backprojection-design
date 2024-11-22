@@ -29,17 +29,13 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
 }
 
 void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                             input_buffer<TT_DATA, extents<2048>>& __restrict xy_px_in,
+                             input_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict xy_px_in,
                              output_pktstream *dr_out) {
     
     // Get packet ID for routing from specific index. Packet ID is automatically
     // given at compile time and must be fetched indirectly via an index.
     uint32 id = getPacketid(dr_out, 0);
     printf("ID: %d\n", id);
-
-    // Generate header for output stream
-    int pkt_type = -1;
-    //writeHeader(dr_out, pkt_type, 0);
 
     // Create iterators from input and output buffers
     auto st_in_vec_iter = aie::begin_vector<ST_ELEMENTS>(slowtime_in);
@@ -54,20 +50,26 @@ void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restri
 
     // Initialize radar parameters
     float range_freq_step = 1471301.6;
-    float range_samples = 8192;
     float min_freq = 9288080400.0;
     float C = 299792458.0;
     float range_width = C/(2.0*range_freq_step);
-    float range_res = range_width/range_samples;
+    float range_res = range_width/(float)(TP_POINT_SIZE);
     float inv_range_res = 1.0/range_res;
 
     // Precalculate z_diff_sq
     auto z_diff_sq = z_ant*z_ant;
     
-    //const uint32 ITER = 2048/16;
-    const uint32 ITER = 2;
+    const uint32 ITER = TP_POINT_SIZE/4/16;
+    //const uint32 ITER = 1;
+    
+    float upper_bound = (float)(TP_POINT_SIZE/2);
+    float upper_mid_bound = (float)(TP_POINT_SIZE/4);
+    float mid_bound = 0.0f;
+    float lower_mid_bound = -upper_mid_bound;
+    float lower_bound = -upper_bound;
 
     //writeHeader(dr_out, pkt_type, 3);
+    int pkt_type = -1;
     for(int xy_idx=0; xy_idx < ITER; xy_idx++) chess_prepare_for_pipelining {
         auto xy_px_vec = *xy_in_iter++;
         auto x_pxls_vec = aie::real(xy_px_vec);
@@ -86,68 +88,180 @@ void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restri
         auto xyz_sqrt_acc = aie::sqrt(xyz_add_acc);
 
         auto differ_range_vec = aie::sub(xyz_sqrt_acc, r0).to_vector<float>(0);
-        printf("dr %d: differ_range_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
-                differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
-                differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
-                differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
-                differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15));
 
         // Calculate the approximate index for differ_range_vec in the equally spaced range grid
         auto px_idx_vec = aie::mul(inv_range_res, differ_range_vec).to_vector<float>(0);
-        printf("dr %d: px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
+        
+        //for (int i=0; i<16; i++) {
+        //    float px_idx_val = px_idx_vec.get(i);
+
+        //    if (px_idx_val >= 2048.0f && pkt_type != 3) {
+        //        if (pkt_type != -1) {
+        //            printf("%d: DR: TLAST\n", id, pkt_type);
+        //            writeincr(dr_out, 0, true); // Assert TLAST
+        //        }
+        //        pkt_type = 3;
+        //        printf("%d: DR: pkt_type=%d\n", id, pkt_type);
+        //        writeHeader(dr_out, pkt_type, id);
+        //    } else if (px_idx_val >= 0.0f && px_idx_val < 2048.0f && pkt_type != 2) {
+        //        if (pkt_type != -1) {
+        //            printf("%d: DR: TLAST\n", id, pkt_type);
+        //            writeincr(dr_out, 0, true); // Assert TLAST
+        //        }
+        //        pkt_type = 2;
+        //        printf("%d: DR: pkt_type=%d\n", id, pkt_type);
+        //        writeHeader(dr_out, pkt_type, id);
+        //    } else if (px_idx_val >= -2048.0f && px_idx_val < 0.0f && pkt_type != 1) {
+        //        if (pkt_type != -1) {
+        //            printf("%d: DR: TLAST\n", id, pkt_type);
+        //            writeincr(dr_out, 0, true); // Assert TLAST
+        //        }
+        //        pkt_type = 1;
+        //        printf("%d: DR: pkt_type=%d\n", id, pkt_type);
+        //        writeHeader(dr_out, pkt_type, id);
+        //    } else if (px_idx_val >= -4096.0f && px_idx_val < -2048.0f && pkt_type != 0) {
+        //        if (pkt_type != -1) {
+        //            printf("%d: DR: TLAST\n", id, pkt_type);
+        //            writeincr(dr_out, 0, true); // Assert TLAST
+        //        }
+        //        pkt_type = 0;
+        //        printf("%d: DR: pkt_type=%d\n", id, pkt_type);
+        //        writeHeader(dr_out, pkt_type, id);
+        //    }
+        //    // Write data contents to stream
+        //    printf("%d: DR: px_idx_vec[%d]=%f\n", id, i, px_idx_vec.get(i));
+        //    writeincr(dr_out, differ_range_vec.get(i));
+        //}
+        auto seg4_high_mask = aie::lt(px_idx_vec, upper_bound);
+        auto seg4_low_mask = aie::ge(px_idx_vec, upper_mid_bound);
+        bool seg4_mask = seg4_high_mask.full() & seg4_low_mask.full();
+
+        auto seg3_high_mask = aie::lt(px_idx_vec, upper_mid_bound);
+        auto seg3_low_mask = aie::ge(px_idx_vec, mid_bound);
+        bool seg3_mask = seg3_high_mask.full() & seg3_low_mask.full();
+
+        auto seg2_high_mask = aie::lt(px_idx_vec, mid_bound);
+        auto seg2_low_mask = aie::ge(px_idx_vec, lower_mid_bound);
+        bool seg2_mask = seg2_high_mask.full() & seg2_low_mask.full();
+
+        auto seg1_high_mask = aie::lt(px_idx_vec, lower_mid_bound);
+        auto seg1_low_mask = aie::ge(px_idx_vec, lower_bound);
+        bool seg1_mask = seg1_high_mask.full() & seg1_low_mask.full();
+
+        bool good_seg = seg4_mask | seg3_mask | seg2_mask | seg1_mask;
+        
+        //if (seg4_mask.full() && pkt_type != 3) {
+        if (seg4_mask) {
+            printf("%d: DIFFER_RANGE: px_idx >= %f: pkt_type: %d | "\
+                    "differ_range_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f] " \
+                    "px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id, upper_mid_bound, pkt_type,
+                differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
+                differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
+                differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
+                differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15),
                 px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3), 
                 px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
                 px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11), 
                 px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
-        
-        auto seg4_mask = aie::ge(px_idx_vec, 2048.0f);
-        auto seg3_mask = aie::ge(px_idx_vec, 0.0f);
-        auto seg2_mask = aie::ge(px_idx_vec, -2048.0f);
-        auto seg1_mask = aie::ge(px_idx_vec, -4096.0f);
-        
-        if (seg4_mask.full() && pkt_type != 3) {
-            printf("dr %d: pkt_type (seg 4): %d\n", id, pkt_type);
             if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
             pkt_type = 3;
             writeHeader(dr_out, pkt_type, id);
         }
-        else if (seg3_mask.full() && pkt_type != 2) {
-            printf("dr %d: pkt_type (seg 3): %d\n", id, pkt_type);
+        //else if (seg3_mask.full() && pkt_type != 2) {
+        else if (seg3_mask) {
+            printf("%d: DIFFER_RANGE: px_idx >= %f: pkt_type: %d | "\
+                    "differ_range_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f] " \
+                    "px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id, mid_bound, pkt_type,
+                differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
+                differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
+                differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
+                differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15),
+                px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3), 
+                px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
+                px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11), 
+                px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
             if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
             pkt_type = 2;
             writeHeader(dr_out, pkt_type, id);
         }
-        else if (seg2_mask.full() && pkt_type != 1) {
-            printf("dr %d: pkt_type (seg 2): %d\n", id, pkt_type);
+        //else if (seg2_mask.full() && pkt_type != 1) {
+        else if (seg2_mask) {
+            printf("%d: DIFFER_RANGE: px_idx >= %f: pkt_type: %d | "\
+                    "differ_range_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f] " \
+                    "px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id, lower_mid_bound, pkt_type,
+                differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
+                differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
+                differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
+                differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15),
+                px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3), 
+                px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
+                px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11), 
+                px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
             if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
             pkt_type = 1;
             writeHeader(dr_out, pkt_type, id);
         }
-        else if (seg1_mask.full() && pkt_type != 0) {
-            printf("dr %d: pkt_type (seg 1): %d\n", id, pkt_type);
+        //else if (seg1_mask.full() && pkt_type != 0) {
+        else if (seg1_mask) {
+            printf("%d: DIFFER_RANGE: px_idx >= %f: pkt_type: %d | "\
+                    "differ_range_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f] " \
+                    "px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id, lower_bound, pkt_type,
+                differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
+                differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
+                differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
+                differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15),
+                px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3), 
+                px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
+                px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11), 
+                px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
             if (pkt_type != -1)
                 writeincr(dr_out, 0, true); // Assert TLAST
             pkt_type = 0;
             writeHeader(dr_out, pkt_type, id);
         }
         else {
-            printf("dr %d: WARN: px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
+            printf("%d: DIFFER_RANGE: WARN: BOUNDS = %f, %f, %f, %f, %f | px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", id,
+                    upper_bound, upper_mid_bound, mid_bound, lower_mid_bound, lower_bound,
                     px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3), 
                     px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
                     px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11), 
                     px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
         }
         
-        if (pkt_type == 0) {
+        if (good_seg)
             for(int i=0; i<16; i++) {
-                printf("dr %d: pkt_type: %d | %f\n", id, pkt_type, differ_range_vec.get(i));
+                //printf("dr %d: pkt_type: %d | %f\n", id, pkt_type, differ_range_vec.get(i));
                 writeincr(dr_out, differ_range_vec.get(i));
             }
-        }
     }
+    writeincr(dr_out, 0, true); // Assert TLAST
+}
+
+void arbiter_kern(input_pktstream *in, output_pktstream *out) {
+    uint32 header = readincr(in);
+    uint32 id = header & 0x1F;
+    uint32 pkt_type = (header & 0x7000) >> 12;
+    
+    if (pkt_type == 0)
+        writeHeader(out, 0, 0);
+    else if (pkt_type == 1)
+        writeHeader(out, 1, 1);
+    else if (pkt_type == 2)
+        writeHeader(out, 2, 2);
+    else if (pkt_type == 3)
+        writeHeader(out, 3, 3);
+
+    bool tlast = false;
+    while (!tlast) {
+        int val = readincr(in, tlast);
+
+        //printf("%d ARBITER: pkt_type: %u | val: %f | tlast: %d\n", id, pkt_type, reinterpret_cast<float&>(val), tlast);
+        writeincr(out, val, tlast);
+    }
+    printf("%d ARBITER DONE: pkt_type: %d\n", id, pkt_type);
 }
 
 ImgReconstruct::ImgReconstruct(int id)
@@ -157,15 +271,14 @@ ImgReconstruct::ImgReconstruct(int id)
     // Initialize m_img to all zeros
     auto img_iter = aie::begin_vector<16>(m_img);
     auto zero_init_vec = aie::zeros<TT_DATA, 16>();
-    for(unsigned i=0; i<2048/16; i++) {
+    for(unsigned i=0; i<TP_POINT_SIZE/4/16; i++) {
         *img_iter++ = zero_init_vec;
     }
 }
 
-void ImgReconstruct::init_radar_params(float range_freq_step, int range_samples, float min_freq)
+void ImgReconstruct::init_radar_params(float range_freq_step, float min_freq)
 {
     m_radar_params.range_freq_step = range_freq_step;
-    m_radar_params.range_samples = range_samples;
     m_radar_params.min_freq = min_freq;
     m_radar_params.ph_corr_coef = (4*PI*min_freq)/C;
     
@@ -176,9 +289,9 @@ void ImgReconstruct::init_radar_params(float range_freq_step, int range_samples,
 void ImgReconstruct::init_range_grid()
 {
     m_range_grid.range_width = C/(2.0*m_radar_params.range_freq_step);
-    m_range_grid.range_res = m_range_grid.range_width/m_radar_params.range_samples;
+    m_range_grid.range_res = m_range_grid.range_width/TP_POINT_SIZE;
     m_range_grid.inv_range_res = 1.0/m_range_grid.range_res;
-    m_range_grid.seg_offset = (float)((3-m_id)*2048);
+    m_range_grid.seg_offset = (2.0-(float)(m_id))*(float)(TP_POINT_SIZE/4);
     
     //int sample_num = -2048;
     //for (int i=0; i<BP_SOLVERS; i++) {
@@ -195,23 +308,23 @@ void ImgReconstruct::init_range_grid()
     //}
 }
 
-void ImgReconstruct::print_float(const char *str, aie::vector<float,16> data) {
-    printf("%d: %s=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, str,
-           data.get(0),  data.get(1),  data.get(2),  data.get(3), 
-           data.get(4),  data.get(5),  data.get(6),  data.get(7),
-           data.get(8),  data.get(9),  data.get(10), data.get(11), 
-           data.get(12), data.get(13), data.get(14), data.get(15));
-
-}
-
-void ImgReconstruct::print_int32(const char *str, aie::vector<int32,16> data) {
-    printf("%d: %s=%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", m_id, str,
-           data.get(0),  data.get(1),  data.get(2),  data.get(3), 
-           data.get(4),  data.get(5),  data.get(6),  data.get(7),
-           data.get(8),  data.get(9),  data.get(10), data.get(11), 
-           data.get(12), data.get(13), data.get(14), data.get(15));
-
-}
+//void ImgReconstruct::print_float(const char *str, aie::vector<float,16> data) {
+//    printf("%d: %s=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, str,
+//           data.get(0),  data.get(1),  data.get(2),  data.get(3), 
+//           data.get(4),  data.get(5),  data.get(6),  data.get(7),
+//           data.get(8),  data.get(9),  data.get(10), data.get(11), 
+//           data.get(12), data.get(13), data.get(14), data.get(15));
+//
+//}
+//
+//void ImgReconstruct::print_int32(const char *str, aie::vector<int32,16> data) {
+//    printf("%d: %s=%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", m_id, str,
+//           data.get(0),  data.get(1),  data.get(2),  data.get(3), 
+//           data.get(4),  data.get(5),  data.get(6),  data.get(7),
+//           data.get(8),  data.get(9),  data.get(10), data.get(11), 
+//           data.get(12), data.get(13), data.get(14), data.get(15));
+//
+//}
 
 //void ImgReconstruct::init_pixel_grid(float x_st, float x_en, int x_len, float y_st, float y_en, int y_len)
 //{
@@ -244,16 +357,26 @@ void ImgReconstruct::print_int32(const char *str, aie::vector<int32,16> data) {
 //    }
 //}
 
-void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents<2048>>& __restrict rc_in,
+void ImgReconstruct::img_reconstruct_kern(input_async_circular_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict rc_in,
                                           input_pktstream *dr_in,
-                                          output_async_buffer<TT_DATA, extents<2048>>& __restrict img_out) {
+                                          output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict img_out) {
     printf("%d: HEREEEEEEEEEEEEEE\n", m_id);
-    // Lock img_out buffer
+    uint32 id = getPacketid(dr_in, 0);
+    printf("%d: PACKET_ID = %d\n", m_id, id);
+    
+
+    //2 ISSUES...1ST IS THAT THIS FUNCTION IS BEING CALLED MORE TIMES THAN I WOULD EXPECT...I SHOULD FIGURE OUT UNDER WHAT
+    //CONDITIONS THIS FUNCTION IS BEING INVOKED BECAUE THAT MAY HAVE IMPLICATIONS ON THE 2ND ISSUE. 2ND ISSSUE IS THAT THERE 
+    //WILL BE CASES WHEN THIS FUNCTION WILL NOT RECIEVE dr_in DATA...BECAUSE THIS FUNCTION IS CALLED AT LEAST ONCE, THERE WILL
+    //BE AN INDEFINITE BLOCK DUE TO TRYING TO PERFORM A READINCR() FOR THE STREAM HEADER.
+
+    //I THINK I SHOULD REAPPROACH THIS PROBLEM A DIFFRENT WAY...THERE ARE TOO MANY ISSUES...IM THINKING ABOUT SENDING THE rc_in
+    //DATA TO ALL KERNELS THAT CALCULATE THE DIFFERNETIAL RANGE...MAY RUN INTO ISSUES WHERE I NEED TO GO BACK TO A rc_in SEGMENT AFTER FINISHING IT...? Maybe?
+    // Lock buffers to show this kernel is still working on them
+    rc_in.acquire();
     img_out.acquire();
 
-    // Read header from stream and discard
-    uint32 tmp = readincr(dr_in);
-    printf("%d: YOOOOOO: %d\n", m_id, tmp);
+    //printf("%d: YOOOOOO: %d\n", m_id, tmp);
 
     // Create iterators from input and output buffers
     auto rc_in_iter = aie::begin_random_circular(rc_in); // Compressed range lines in time domain
@@ -278,7 +401,8 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
     //auto img_out_iter = aie::begin_vector<16>(img_out);
     
     // Initialize radar parameters
-    init_radar_params(1471301.6, 8192, 9288080400.0);
+    //init_radar_params(1471301.6, 9288080400.0);
+    init_radar_params(5000000.0, 9288080400.0);
 
     // Initialize range grid based on range compressed data
     init_range_grid();
@@ -331,19 +455,33 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
     //auto z_diff_sq = z_ant*z_ant;
 
 
-    aie::vector<int32,16> differ_range_int_vec;
 
-    //for(int xy_idx=0; xy_idx < 2048/16; xy_idx++) chess_prepare_for_pipelining {
-    for(int xy_idx=0; xy_idx < 2; xy_idx++) chess_prepare_for_pipelining {
+    //for(int xy_idx=0; xy_idx < TP_POINT_SIZE/4/16; xy_idx++) chess_prepare_for_pipelining {
+    for(int xy_idx=0; xy_idx < 1; xy_idx++) chess_prepare_for_pipelining {
         //printf("\n%d: ITERATION: %d\n", m_id, xy_idx);
 
+        // Read header from stream and discard
+        uint32 header = readincr(dr_in);
+        //printf("%d IMG_RECON: header: %u\n",m_id,header);
+
         // Extract differential range vector
+        aie::vector<int32,16> differ_range_int_vec = aie::zeros<int32,16>();
         for(int i=0; i < 16; i++) chess_prepare_for_pipelining {
-            printf("%d: here\n", m_id);
             differ_range_int_vec.set(readincr(dr_in), i);
         }
+
+        // Discard tlast
+        bool tlast;
+        readincr(dr_in, tlast);
+        printf("%d IMG_RECON: TLAST = %d\n", m_id, tlast);
+
         aie::vector<float,16> differ_range_vec = differ_range_int_vec.cast_to<float>();
-        print_float("differ_range_vec", differ_range_vec);
+        //printf("%d IMG_RECON: differ_range_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //        differ_range_vec.get(0),  differ_range_vec.get(1),  differ_range_vec.get(2),  differ_range_vec.get(3), 
+        //        differ_range_vec.get(4),  differ_range_vec.get(5),  differ_range_vec.get(6),  differ_range_vec.get(7),
+        //        differ_range_vec.get(8),  differ_range_vec.get(9),  differ_range_vec.get(10), differ_range_vec.get(11), 
+        //        differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15));
+        //print_float("differ_range_vec", differ_range_vec);
         
         //auto differ_range_vec = *dr_in_iter++;
 
@@ -381,8 +519,8 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
         // Calculate the sin and cos of ph_corr_angle and store as a cfloat (cos in the real part, sin in the imaginary)
         auto ph_corr_vec = aie::sincos_complex(ph_corr_angle_vec);
         ph_corr_vec = aie::neg(ph_corr_vec);
-        auto ph_corr_real = aie::real(ph_corr_vec);
-        auto ph_corr_imag = aie::imag(ph_corr_vec);
+        //auto ph_corr_real = aie::real(ph_corr_vec);
+        //auto ph_corr_imag = aie::imag(ph_corr_vec);
         //printf("%d: ph_corr=[[%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], " \
         //       "[%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f]]\n", m_id, 
         //        ph_corr_real.get(0),  ph_corr_imag.get(0),   ph_corr_real.get(1),  ph_corr_imag.get(1),  
@@ -414,45 +552,23 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
         
         // Calculate the approximate index for differ_range_vec in the equally spaced range grid
         auto px_idx_acc = aie::mul(m_range_grid.inv_range_res, differ_range_vec);
-        
+
         // Shift indices so they are not negative
-        //float seg_offset = (float)(2048*(m_id-1));
-        //printf("%d: seg_offset: %f\n", m_id, seg_offset);
-        px_idx_acc = aie::add(px_idx_acc, 4096.0f-m_range_grid.seg_offset);
-        //if (m_id == 0)
-        //    px_idx_acc = aie::sub(px_idx_acc, 6144.0f);
-        //else if (m_id == 1)
-        //    px_idx_acc = aie::sub(px_idx_acc, 4096.0f);
-        //else if (m_id == 2)
-        //    px_idx_acc = aie::sub(px_idx_acc, 2048.0f);
-
-
-        //auto px_idx_vec = aie::mul(m_range_grid.inv_range_res, differ_range_vec).to_vector<float>(0);
-        //printf("m_range_grid.inv_range_res: %f\n", m_range_grid.inv_range_res);
-        //print_float("px_idx_vec", px_idx_vec);
-        //printf("%d: px_idx_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-        //       px_idx_vec.get(0),  px_idx_vec.get(1),  px_idx_vec.get(2),  px_idx_vec.get(3),
-        //       px_idx_vec.get(4),  px_idx_vec.get(5),  px_idx_vec.get(6),  px_idx_vec.get(7),
-        //       px_idx_vec.get(8),  px_idx_vec.get(9),  px_idx_vec.get(10), px_idx_vec.get(11),
-        //       px_idx_vec.get(12), px_idx_vec.get(13), px_idx_vec.get(14), px_idx_vec.get(15));
-        
-        // Offset by samp_start_size (accommodates for fftshift)
-        //px_idx_acc = aie::add(px_idx_acc, m_range_grid.samp_start_size);
-        
+        //printf("%d IMG_RECON: seg_offset: %f\n", m_id, m_range_grid.seg_offset);
+        px_idx_acc = aie::add(px_idx_acc, m_range_grid.seg_offset);
         auto low_idx_float_vec = aie::sub(px_idx_acc, 0.5f).to_vector<float>(0);
-        //auto high_idx_float_vec = aie::add(px_idx_acc, 0.5f).to_vector<float>(0);
-        //printf("%d: low_idx_float_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-        //       low_idx_float_vec.get(0),  low_idx_float_vec.get(1),  low_idx_float_vec.get(2),  low_idx_float_vec.get(3),
-        //       low_idx_float_vec.get(4),  low_idx_float_vec.get(5),  low_idx_float_vec.get(6),  low_idx_float_vec.get(7),
-        //       low_idx_float_vec.get(8),  low_idx_float_vec.get(9),  low_idx_float_vec.get(10), low_idx_float_vec.get(11),
-        //       low_idx_float_vec.get(12), low_idx_float_vec.get(13), low_idx_float_vec.get(14), low_idx_float_vec.get(15));
 
         // Round to nearest whole number
         auto low_idx_int_vec = aie::to_fixed<int32>(low_idx_float_vec);
         auto high_idx_int_vec = aie::add(low_idx_int_vec, 1);
         low_idx_float_vec = aie::to_float(low_idx_int_vec);
-        print_int32("low_idx_int_vec", low_idx_int_vec);
-        print_int32("high_idx_int_vec", high_idx_int_vec);
+        //printf("%d IMG_RECON: low_idx_float_vec=[%f, %f, %f, %f]\n", m_id, 
+        //       low_idx_float_vec.get(0),  low_idx_float_vec.get(1),  low_idx_float_vec.get(2),  low_idx_float_vec.get(3));
+        //       //low_idx_float_vec.get(4),  low_idx_float_vec.get(5),  low_idx_float_vec.get(6),  low_idx_float_vec.get(7),
+        //       //low_idx_float_vec.get(8),  low_idx_float_vec.get(9),  low_idx_float_vec.get(10), low_idx_float_vec.get(11),
+        //       //low_idx_float_vec.get(12), low_idx_float_vec.get(13), low_idx_float_vec.get(14), low_idx_float_vec.get(15));
+        //print_int32("low_idx_int_vec", low_idx_int_vec);
+        //print_int32("high_idx_int_vec", high_idx_int_vec);
         //print_float("low_idx_float_vec", low_idx_float_vec);
 
         // Fractional part for interpolation
@@ -467,10 +583,10 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
         aie::vector<cfloat,16> interp_vec;
         //aie::vector<float,16> tmp2;
         //aie::vector<float,16> tmp3;
-        printf("%d: rc_in_iter[0].real=%f\n", m_id, rc_in_iter[0].real);
+        //printf("%d: rc_in_iter[0].real=%f\n", m_id, rc_in_iter[0].real);
         for(int i=0; i<16; i++) {
-            //printf("%d: low_idx_int_vec[%d] = %d | high_idx_int_vec[%d] = %d\n", m_id, i, low_idx_int_vec.get(i), i, high_idx_int_vec.get(i));
-            printf("%d: low_idx_int_vec[%d] = %d | rc_in_iter[low_idx_int_vec.get(i)].real = %f\n", m_id, i, low_idx_int_vec.get(i), rc_in_iter[low_idx_int_vec.get(i)].real);
+            //printf("%d IMG_RECON: low_idx_int_vec[%d] = %d | high_idx_int_vec[%d] = %d\n", m_id, i, low_idx_int_vec.get(i), i, high_idx_int_vec.get(i));
+            //printf("%d IMG_RECON: low_idx_int_vec[%d] = %d | rc_in_iter[low_idx_int_vec.get(i)].real = %f\n", m_id, i, low_idx_int_vec.get(i), rc_in_iter[low_idx_int_vec.get(i)].real);
             //printf("%d: rc_in_iter[low]=[%f, %f] | rc_in_iter[high]=[%f, %f]\n", m_id, 
             //        rc_in_iter[low_idx_int_vec.get(i)].real, rc_in_iter[low_idx_int_vec.get(i)].imag, 
             //        rc_in_iter[high_idx_int_vec.get(i)].real, rc_in_iter[high_idx_int_vec.get(i)].imag);
@@ -483,17 +599,18 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
         }
         //auto img_vec = aie::mul(interp_vec, ph_corr_vec).to_vector<cfloat>(0);
         auto img_real_vec = aie::real(interp_vec);
-        auto img_imag_vec = aie::imag(interp_vec);
-        printf("%d: img_vec=[[%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f]\n", m_id,
-               //"[%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f]]\n", m_id, 
-                img_real_vec.get(0),  img_imag_vec.get(0),   img_real_vec.get(1),  img_imag_vec.get(1),  
-                img_real_vec.get(2),  img_imag_vec.get(2),   img_real_vec.get(3),  img_imag_vec.get(3),  
-                img_real_vec.get(4),  img_imag_vec.get(4),   img_real_vec.get(5),  img_imag_vec.get(5),  
-                img_real_vec.get(6),  img_imag_vec.get(6),   img_real_vec.get(7),  img_imag_vec.get(7));
-                //img_real_vec.get(8),  img_imag_vec.get(8),   img_real_vec.get(9),  img_imag_vec.get(9),  
-                //img_real_vec.get(10), img_imag_vec.get(10),  img_real_vec.get(11), img_imag_vec.get(11),  
-                //img_real_vec.get(12), img_imag_vec.get(12),  img_real_vec.get(13), img_imag_vec.get(13),  
-                //img_real_vec.get(14), img_imag_vec.get(14),  img_real_vec.get(15), img_imag_vec.get(15));
+        //auto img_imag_vec = aie::imag(interp_vec);
+        printf("%d IMG_RECON: img = [%f, %f, %f, %f]\n", m_id, img_real_vec.get(0), img_real_vec.get(1), img_real_vec.get(2), img_real_vec.get(3));
+        //printf("%d: img_vec=[[%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f]]\n", m_id,
+        //       //"[%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f]]\n", m_id, 
+        //        img_real_vec.get(0),  img_imag_vec.get(0),   img_real_vec.get(1),  img_imag_vec.get(1),  
+        //        img_real_vec.get(2),  img_imag_vec.get(2),   img_real_vec.get(3),  img_imag_vec.get(3),
+        //        img_real_vec.get(4),  img_imag_vec.get(4),   img_real_vec.get(5),  img_imag_vec.get(5),  
+        //        img_real_vec.get(6),  img_imag_vec.get(6),   img_real_vec.get(7),  img_imag_vec.get(7));
+        //        //img_real_vec.get(8),  img_imag_vec.get(8),   img_real_vec.get(9),  img_imag_vec.get(9),  
+        //        //img_real_vec.get(10), img_imag_vec.get(10),  img_real_vec.get(11), img_imag_vec.get(11),  
+        //        //img_real_vec.get(12), img_imag_vec.get(12),  img_real_vec.get(13), img_imag_vec.get(13),  
+        //        //img_real_vec.get(14), img_imag_vec.get(14),  img_real_vec.get(15), img_imag_vec.get(15));
         //printf("%d: tmp2=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
         //       tmp2.get(0),  tmp2.get(1),  tmp2.get(2),  tmp2.get(3),
         //       tmp2.get(4),  tmp2.get(5),  tmp2.get(6),  tmp2.get(7),
@@ -506,73 +623,13 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
         //       tmp3.get(12), tmp3.get(13), tmp3.get(14), tmp3.get(15));
 
 
-        //for(int i=0; i<2048/16; i++) {
-        //    auto rc_vec = *rc_in_iter++; // Answer; interp or nearest neighbors
-
-        //    for(int j=0; j<16; j++) {
-        //        float range_res = (j + i*16)*m_range_grid.range_res; // Actual real x values
-        //        auto target_px = differ_range_vec[j]; //ranges of target X
-
-
-        //        if (target_px > rc_vec[0] && target_px < rc_vec[15]);
-        //    }
-        //}
-
-        auto prev_img_vec = aie::load_v<16>(m_img + xy_idx*16);
-        auto updated_img_vec = aie::add(ph_corr_vec, prev_img_vec);
-        updated_img_vec.store(m_img + xy_idx*16);
+        //auto prev_img_vec = aie::load_v<16>(m_img + xy_idx*16);
+        //auto updated_img_vec = aie::add(img_vec, prev_img_vec);
+        //updated_img_vec.store(m_img + xy_idx*16);
 
         //printf("%d: ph_corr=[[%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f], [%f, %f]]\n", m_id,
         //        ph_corr_real.get(0),  ph_corr_imag.get(0),   ph_corr_real.get(1),  ph_corr_imag.get(1),  
         //        ph_corr_real.get(2),  ph_corr_imag.get(2),   ph_corr_real.get(3),  ph_corr_imag.get(3));
-        
-        //// Determine which pixels fall within the swath range
-        ////auto right_mask = aie::ge(differ_range, min_range_bins);
-        ////auto left_mask = aie::le(differ_range, max_range_bins);
-        ////auto differ_range_mask = right_mask & left_mask;
-        //
-        //auto px_diff = aie::add(m_range_grid.range_width/2, x_pxls);
-        //printf("%d: px_diff=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-        //        px_diff.get(0),  px_diff.get(1),  px_diff.get(2),  px_diff.get(3), 
-        //        px_diff.get(4),  px_diff.get(5),  px_diff.get(6),  px_diff.get(7),
-        //        px_diff.get(8),  px_diff.get(9),  px_diff.get(10), px_diff.get(11), 
-        //        px_diff.get(12), px_diff.get(13), px_diff.get(14), px_diff.get(15));
-
-        ////aie::saturation_mode current_sat=aie::get_saturation();
-        ////printf("CURRENT_SATURATION = %d\n", current_sat);
-
-        //auto range_bins_float = aie::mul(px_diff, m_range_grid.inv_range_res).to_vector<float>(0);
-        //printf("%d: range_bins_float=%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", m_id, 
-        //        range_bins_float.get(0),  range_bins_float.get(1),  range_bins_float.get(2),  range_bins_float.get(3), 
-        //        range_bins_float.get(4),  range_bins_float.get(5),  range_bins_float.get(6),  range_bins_float.get(7),
-        //        range_bins_float.get(8),  range_bins_float.get(9),  range_bins_float.get(10), range_bins_float.get(11), 
-        //        range_bins_float.get(12), range_bins_float.get(13), range_bins_float.get(14), range_bins_float.get(15));
-
-        //// TODO: This is actually rounding correctly...but I need it to floor round...
-        //aie::vector<int32,16> range_bins = aie::to_fixed<int32>(range_bins_float);
-        //printf("%d: range_bins=%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", m_id, 
-        //        range_bins.get(0),  range_bins.get(1),  range_bins.get(2),  range_bins.get(3), 
-        //        range_bins.get(4),  range_bins.get(5),  range_bins.get(6),  range_bins.get(7),
-        //        range_bins.get(8),  range_bins.get(9),  range_bins.get(10), range_bins.get(11), 
-        //        range_bins.get(12), range_bins.get(13), range_bins.get(14), range_bins.get(15));
-
-        //low_range_bins = aie::sub(low_range_bins, fft_seg);
-        //auto high_range_bins = aie::add(low_range_bins, 1);
-
-        //auto rc_vec[i] = rc_in_iter[range_bins[i]-(m_id*2048)];
-        //printf("rc_vec[%d] = {%f, %f}\n", i, ((cfloat)rc_vec[i]).real, ((cfloat)rc_vec[i]).imag);
-
-        //y0+(x-x0)*((y1 - y0)/dr);
-        // Interpolation...HOW TO DO THIS
-        //y0+(x-x0)*((y1 - y0)/(x1-x0));
-        
-        //if (differ_range_mask.full()) {
-        //    auto img_vec = aie::mul(differ_range, ph_corr).to_vector<cfloat>(0);
-        //    aie::store_v(img+(y_idx*x_px_grid_len)+(x_idx*16), img_vec);
-        //}
-
-        //// Increment range bins to next segment
-        //range_bins = aie::add(dr, range_bins);
     }
 
     m_iter++;
@@ -580,10 +637,14 @@ void ImgReconstruct::img_reconstruct_kern(input_circular_buffer<TT_DATA, extents
     // Check if image output should sent
     if (m_iter == ACCUM_PULSES) {
         auto img_iter = aie::begin_vector<16>(m_img);
-        for(unsigned i=0; i<2; i++) {
+        for(unsigned i=0; i<1; i++) {
             *img_out_iter++ = *img_iter++;
         }
     }
 
+
+    // Release buffers to show this kernel is finished working on them
+    rc_in.release();
     img_out.release();
+    printf("done\n");
 }

@@ -171,7 +171,7 @@ int main(int argc, char ** argv) {
     //    }
     //}
 
-    const int PULSES = 2;
+    const int PULSES = 1;
     float* x_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
     float* y_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
     float* z_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
@@ -183,26 +183,26 @@ int main(int argc, char ** argv) {
         ref_range_data_array[i] = 10158.399;
     }
 
-    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
-    for(int i = 0; i < 8192; i++) {
+    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
+    for(int i = 0; i < TP_POINT_SIZE; i++) {
         rc_array[i] = (TT_DATA) {i, i};
     }
 
-    TT_DATA* xy_px_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
+    TT_DATA* xy_px_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
     const float C = 299792458.0;
-    float range_freq_step = 1471301.6;
-    int range_samples = 8192;
-    int half_range_samples = range_samples/2;
+    //float range_freq_step = 1471301.6;
+    float range_freq_step = 5000000.0;
+    int half_range_samples = TP_POINT_SIZE/2;
     float min_freq = 9288080400.0;
 
     float range_width = C/(2.0*range_freq_step);
-    float range_res = range_width/range_samples;
+    float range_res = range_width/TP_POINT_SIZE;
 
-    for(int i = 0; i < range_samples; i++) {
+    for(int i = 0; i < TP_POINT_SIZE; i++) {
         xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
     }
     
-    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(8192*sizeof(TT_DATA));
+    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
 
     //for(int r = 0; r < MAT_ROWS; r++) {
     //    for(int c = 0; c < MAT_COLS; c++) {
@@ -242,67 +242,70 @@ int main(int argc, char ** argv) {
             bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, PULSES*sizeof(float));
 
             for(int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-                bpGraph[inst].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
+                bpGraph[inst].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*(TP_POINT_SIZE/4), (TP_POINT_SIZE/4)*sizeof(TT_DATA));
             }
             for(int i=0; i<IMG_SOLVERS; i++) {
-                bpGraph[inst].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
-                bpGraph[inst].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
+                bpGraph[inst].gmio_in_rc[i].gm2aie_nb(rc_array + i*(TP_POINT_SIZE/4), (TP_POINT_SIZE/4)*sizeof(TT_DATA));
+                bpGraph[inst].gmio_out_img[i].aie2gm_nb(img_array + i*(TP_POINT_SIZE/4), (TP_POINT_SIZE/4)*sizeof(TT_DATA));
             }
         }
 
         // Block until AIE finishes
         for(int inst=0; inst<INSTANCES; inst++) {
             for(int bp=0; bp<IMG_SOLVERS; bp++) {
+                printf("BEFORE WAIT\n");
                 bpGraph[inst].gmio_out_img[bp].wait();
+                printf("AFTER WAIT\n");
+
             }
         }
         //TODO: DEBUG
-        for(int i=0; i<32; i++) {
+        for(int i=0; i<64; i++) {
             printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }
 
-        for(int i=2048; i<2048+32; i++) {
-            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        }
+        //for(int i=2048; i<2048+32; i++) {
+        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        //}
 
-        for(int i=4096; i<4096+32; i++) {
-            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        }
+        //for(int i=4096; i<4096+32; i++) {
+        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        //}
 
-        for(int i=6144; i<6144+32; i++) {
-            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        }
+        //for(int i=6144; i<6144+32; i++) {
+        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        //}
 
-        for(int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-            bpGraph[0].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
-        }
+        //for(int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
+        //    bpGraph[0].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
+        //}
 
-        for(int i=0; i<IMG_SOLVERS; i++) {
-            bpGraph[0].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
-            bpGraph[0].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
-        }
+        //for(int i=0; i<IMG_SOLVERS; i++) {
+        //    bpGraph[0].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
+        //    bpGraph[0].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
+        //}
 
-        for(int inst=0; inst<INSTANCES; inst++) {
-            for(int bp=0; bp<IMG_SOLVERS; bp++) {
-                bpGraph[inst].gmio_out_img[bp].wait();
-            }
-        }
+        //for(int inst=0; inst<INSTANCES; inst++) {
+        //    for(int bp=0; bp<IMG_SOLVERS; bp++) {
+        //        bpGraph[inst].gmio_out_img[bp].wait();
+        //    }
+        //}
 
-        for(int i=0; i<32; i++) {
-            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        }
+        //for(int i=0; i<32; i++) {
+        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        //}
 
-        for(int i=2048; i<2048+32; i++) {
-            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        }
+        //for(int i=2048; i<2048+32; i++) {
+        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        //}
 
-        for(int i=4096; i<4096+32; i++) {
-            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        }
+        //for(int i=4096; i<4096+32; i++) {
+        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        //}
 
-        for(int i=6144; i<6144+32; i++) {
-            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        }
+        //for(int i=6144; i<6144+32; i++) {
+        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
+        //}
 
         //for(int inst=0; inst<INSTANCES; inst++) {
         //    printf("\nPERFORM FFT (ITER = %d) (INST = %d)\n", iter, inst);

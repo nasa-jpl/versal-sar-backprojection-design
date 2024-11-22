@@ -20,8 +20,10 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
                            output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out);
 
 void differential_range_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                             input_buffer<TT_DATA, extents<2048>>& __restrict xy_px_in,
+                             input_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict xy_px_in,
                              output_pktstream *dr_out);
+
+void arbiter_kern(input_pktstream *in, output_pktstream *out);
 
 class ImgReconstruct
 {
@@ -30,12 +32,12 @@ class ImgReconstruct
         static constexpr float TWO_PI = 6.2831853071796;
         static constexpr float INV_TWO_PI = 0.15915494309189;
         static constexpr float C = 299792458.0;
-        static constexpr int ACCUM_PULSES = 2;
+        static constexpr int ACCUM_PULSES = 1;
 
         ImgReconstruct(int id);
-        void img_reconstruct_kern(input_circular_buffer<TT_DATA, extents<2048>>& __restrict rc_in,
+        void img_reconstruct_kern(input_async_circular_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict rc_in,
                                   input_pktstream *dr_in,
-                                  output_async_buffer<TT_DATA, extents<2048>>& __restrict img_out);
+                                  output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict img_out);
 
         void generate_pixel_grid(float x_st, float x_en, float y_st, float y_en, float x_grid_len, float y_grid_len);
         static void registerKernelClass()
@@ -46,26 +48,20 @@ class ImgReconstruct
     private:
         uint32 m_id;
         uint32 m_iter;
-        alignas(aie::vector_decl_align) TT_DATA m_img[2048];
+        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
 
-        void init_radar_params(float range_freq_step, int range_samples, float min_freq);
+        void init_radar_params(float range_freq_step, float min_freq);
         void init_range_grid();
-        void init_pixel_grid(float x_st, float x_en, int x_len, float y_st, float y_en, int y_len);
-        void init_pixel_segment();
-        void print_float(const char *str, aie::vector<float,16> data);
-        void print_int32(const char *str, aie::vector<int32,16> data);
+        //void init_pixel_grid(float x_st, float x_en, int x_len, float y_st, float y_en, int y_len);
+        //void init_pixel_segment();
+        //void print_float(const char *str, aie::vector<float,16> data);
+        //void print_int32(const char *str, aie::vector<int32,16> data);
         
         // Radar parameters
         struct RadarParams {
             float range_freq_step; // Range frequency step size
-            int range_samples;     // Number of samples per range line
             float min_freq;        // Minimum frequency in range line
             float ph_corr_coef;    // Phase correction coefficient
-            void display(int id) const {
-                printf("\nRADAR PARAMS (ID=%d)\nrange_freq_step: %f\nrange_samples: %d\n" \
-                        "min_freq: %f\nph_corr_coef: %f\n", id, range_freq_step, range_samples, 
-                                                            min_freq, ph_corr_coef);
-            }
         } m_radar_params;
 
         // Range grid based on signal time delay
@@ -74,9 +70,6 @@ class ImgReconstruct
             float range_res;       // Range step size
             float inv_range_res;   // Inverse range step size
             float seg_offset;      // Segment offset of samples
-            void display(int id) const {
-                printf("\nRANGE GRID DATA (ID=%d)\nrange_width: %f\nrange_res: %f\n", id, range_width, range_res);
-            }
         } m_range_grid;
         
         //// Pixel grid representing the desired target
