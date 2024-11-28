@@ -24,7 +24,7 @@
 //#define TP_POINT_SIZE 8192
 //#define MAT_ROWS 11539
 
-#define TP_POINT_SIZE 64
+#define TP_POINT_SIZE 8192
 #define MAT_ROWS 2
 #define MAT_COLS TP_POINT_SIZE
 //#define TMPL_MAT_ROWS TP_POINT_SIZE/8

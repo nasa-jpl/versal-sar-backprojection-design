@@ -33,10 +33,11 @@ class SARBackproject {
         hid_t file;
 
         // AIE Graphs
-        std::vector<xrt::graph> m_fft_graph_hdls;
-        std::vector<xrt::graph> m_ifft_graph_hdls;
-        std::vector<xrt::graph> m_cplx_conj_graph_hdls;
-        std::vector<xrt::graph> m_hp_graph_hdls;
+        std::vector<xrt::graph> m_bp_graph_hdls;
+        //std::vector<xrt::graph> m_fft_graph_hdls;
+        //std::vector<xrt::graph> m_ifft_graph_hdls;
+        //std::vector<xrt::graph> m_cplx_conj_graph_hdls;
+        //std::vector<xrt::graph> m_hp_graph_hdls;
 
         // PRIVATE FUNCTIONS
         bool readCplxDataset(hid_t file, const std::string& dataset_name, std::vector<TT_DATA>& data);
@@ -45,10 +46,24 @@ class SARBackproject {
 
     public:
         // Buffer objects and corresponding arrays for AIE processing
-        xrt::aie::bo m_range_data_buffer;
-        TT_DATA* m_range_data_array;
-        xrt::aie::bo m_ref_func_buffer;
-        TT_DATA* m_ref_func_array;
+        xrt::aie::bo m_x_ant_pos_buffer;
+        float* m_x_ant_pos_array;
+        xrt::aie::bo m_y_ant_pos_buffer;
+        float* m_y_ant_pos_array;
+        xrt::aie::bo m_z_ant_pos_buffer;
+        float* m_z_ant_pos_array;
+        xrt::aie::bo m_ref_range_buffer;
+        float* m_ref_range_array;
+        xrt::aie::bo m_xy_px_buffer;
+        TT_DATA* m_xy_px_array;
+        xrt::aie::bo m_rc_buffer;
+        TT_DATA* m_rc_array;
+        xrt::aie::bo m_img_buffer;
+        TT_DATA* m_img_array;
+        //xrt::aie::bo m_range_data_buffer;
+        //TT_DATA* m_range_data_array;
+        //xrt::aie::bo m_ref_func_buffer;
+        //TT_DATA* m_ref_func_array;
 
     public:
         // Constructor
@@ -65,6 +80,10 @@ class SARBackproject {
         static void strideCols(TT_DATA* input, int rows, int cols, int stride, bool reverse=false);
         void runGraphs();
         bool fetchRadarData();
+        void bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
+                xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
+                xrt::aie::bo* buffers_xy_px_in, xrt::aie::bo* buffers_rc_in, 
+                xrt::aie::bo* buffers_img_out, int num_of_buffers);
         void fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);

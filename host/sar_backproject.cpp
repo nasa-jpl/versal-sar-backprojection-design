@@ -23,10 +23,24 @@ SARBackproject::SARBackproject(const char* xclbin_filename, const char* h5_filen
 , m_instances(instances)
 , m_device(0)
 , m_uuid(m_device.load_xclbin(this->m_xclbin_filename))
-, m_range_data_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
-, m_range_data_array(m_range_data_buffer.map<TT_DATA*>())
-, m_ref_func_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
-, m_ref_func_array(m_ref_func_buffer.map<TT_DATA*>())
+, m_x_ant_pos_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_x_ant_pos_array(m_x_ant_pos_buffer.map<float*>())
+, m_y_ant_pos_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_y_ant_pos_array(m_y_ant_pos_buffer.map<float*>())
+, m_z_ant_pos_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_z_ant_pos_array(m_z_ant_pos_buffer.map<float*>())
+, m_ref_range_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_ref_range_array(m_ref_range_buffer.map<float*>())
+, m_xy_px_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_xy_px_array(m_xy_px_buffer.map<TT_DATA*>())
+, m_rc_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_rc_array(m_rc_buffer.map<TT_DATA*>())
+, m_img_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_img_array(m_img_buffer.map<TT_DATA*>())
+//, m_range_data_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+//, m_range_data_array(m_range_data_buffer.map<TT_DATA*>())
+//, m_ref_func_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+//, m_ref_func_array(m_ref_func_buffer.map<TT_DATA*>())
 {
     //hid_t file_id;
     //file_id = H5Fcreate("test.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
@@ -34,24 +48,26 @@ SARBackproject::SARBackproject(const char* xclbin_filename, const char* h5_filen
 
     // Instantiate kernels, handlers, and buffers for multiple instances
     for(int i = 0; i < this->m_instances; i++) {
-        //std::string dma_hls_fft_kernel_str = "dma_hls:{dma_hls_" + std::to_string(i * 2) + "}";
-        //std::string dma_hls_ifft_kernel_str = "dma_hls:{dma_hls_" + std::to_string(i * 2 + 1) + "}";
-        std::string fftGraph_str = "fftGraph[" + std::to_string(i) + "]";
-        std::string ifftGraph_str = "ifftGraph[" + std::to_string(i) + "]";
-        std::string cplxConjGraph_str = "cplxConjGraph[" + std::to_string(i) + "]";
-        std::string hpGraph_str = "hpGraph[" + std::to_string(i) + "]";
+        std::string bpGraph_str = "bpGraph[" + std::to_string(i) + "]";
+        ////std::string dma_hls_fft_kernel_str = "dma_hls:{dma_hls_" + std::to_string(i * 2) + "}";
+        ////std::string dma_hls_ifft_kernel_str = "dma_hls:{dma_hls_" + std::to_string(i * 2 + 1) + "}";
+        //std::string fftGraph_str = "fftGraph[" + std::to_string(i) + "]";
+        //std::string ifftGraph_str = "ifftGraph[" + std::to_string(i) + "]";
+        //std::string cplxConjGraph_str = "cplxConjGraph[" + std::to_string(i) + "]";
+        //std::string hpGraph_str = "hpGraph[" + std::to_string(i) + "]";
 
-        //m_dma_hls_fft_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_hls_fft_kernel_str));
-        //m_dma_hls_fft_run_hdls.push_back(xrt::run(m_dma_hls_fft_kernels[i]));
-        //m_dma_hls_fft_buffers.push_back(xrt::bo(m_device, BLOCK_SIZE_BYTES, m_dma_hls_fft_kernels[i].group_id(0)));
-        //m_dma_hls_ifft_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_hls_ifft_kernel_str));
-        //m_dma_hls_ifft_run_hdls.push_back(xrt::run(m_dma_hls_ifft_kernels[i]));
-        //m_dma_hls_ifft_buffers.push_back(xrt::bo(m_device, BLOCK_SIZE_BYTES, m_dma_hls_ifft_kernels[i].group_id(0)));
-        m_fft_graph_hdls.push_back(xrt::graph(m_device, m_uuid, fftGraph_str));
-        m_ifft_graph_hdls.push_back(xrt::graph(m_device, m_uuid, ifftGraph_str));
-        m_cplx_conj_graph_hdls.push_back(xrt::graph(m_device, m_uuid, cplxConjGraph_str));
-        m_hp_graph_hdls.push_back(xrt::graph(m_device, m_uuid, hpGraph_str));
-        //m_aie_to_pl_buffers.push_back(xrt::aie::bo(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0));
+        ////m_dma_hls_fft_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_hls_fft_kernel_str));
+        ////m_dma_hls_fft_run_hdls.push_back(xrt::run(m_dma_hls_fft_kernels[i]));
+        ////m_dma_hls_fft_buffers.push_back(xrt::bo(m_device, BLOCK_SIZE_BYTES, m_dma_hls_fft_kernels[i].group_id(0)));
+        ////m_dma_hls_ifft_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_hls_ifft_kernel_str));
+        ////m_dma_hls_ifft_run_hdls.push_back(xrt::run(m_dma_hls_ifft_kernels[i]));
+        ////m_dma_hls_ifft_buffers.push_back(xrt::bo(m_device, BLOCK_SIZE_BYTES, m_dma_hls_ifft_kernels[i].group_id(0)));
+        m_bp_graph_hdls.push_back(xrt::graph(m_device, m_uuid, bpGraph_str));
+        //m_fft_graph_hdls.push_back(xrt::graph(m_device, m_uuid, fftGraph_str));
+        //m_ifft_graph_hdls.push_back(xrt::graph(m_device, m_uuid, ifftGraph_str));
+        //m_cplx_conj_graph_hdls.push_back(xrt::graph(m_device, m_uuid, cplxConjGraph_str));
+        //m_hp_graph_hdls.push_back(xrt::graph(m_device, m_uuid, hpGraph_str));
+        ////m_aie_to_pl_buffers.push_back(xrt::aie::bo(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0));
     }
 
     // Seed random number generator used for selecting
@@ -255,33 +271,57 @@ bool SARBackproject::fetchRadarData() {
     //    this->m_range_data_array[i] = (TT_DATA) {lut[hh[i].real], lut[hh[i].imag]};
     //}
 
-    //TODO: DEBUG
-    for(int r = 0; r < MAT_ROWS; r++) {
-        for(int c = 0; c < MAT_COLS; c++) {
-            int index = (r*MAT_COLS)+c;
-            if (c == 1) {
-                this->m_range_data_array[index] = (TT_DATA) {1.5, 1.5};
-            }
-            else {
-                this->m_range_data_array[index] = (TT_DATA) {0, 0};
-            }
-        }
+    const int PULSES = 1;
+    for(int i = 0; i < PULSES; i++) {
+        this->m_x_ant_pos_array[i] = 7089.2646;
+        this->m_y_ant_pos_array[i] = 0.5289;
+        this->m_z_ant_pos_array[i] = 7275.6719;
+        this->m_ref_range_array[i] = 10158.399;
     }
 
-    for(int r=0; r<5; r++) {
-        for(int c=0; c<5; c++) {
-            int index = (r*MAT_COLS) + c;
-            printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", r, c, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
-        }
+    for(int i = 0; i < TP_POINT_SIZE; i++) {
+        this->m_rc_array[i] = (TT_DATA) {i, i};
     }
 
-    //TODO: Temporary until we know which ref function to use for range compression
-    for(int r = 0; r < MAT_ROWS; r++) {
-        for(int c = 0; c < MAT_COLS; c++) {
-            int index = (r*MAT_COLS)+c;
-            this->m_ref_func_array[index] = (TT_DATA) {1, 1};
-        }
+    const float C = 299792458.0;
+    float range_freq_step = 1471301.6;
+    int half_range_samples = TP_POINT_SIZE/2;
+    float min_freq = 9288080400.0;
+
+    float range_width = C/(2.0*range_freq_step);
+    float range_res = range_width/TP_POINT_SIZE;
+
+    for(int i = 0; i < TP_POINT_SIZE; i++) {
+        this->m_xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
     }
+
+    ////TODO: DEBUG
+    //for(int r = 0; r < MAT_ROWS; r++) {
+    //    for(int c = 0; c < MAT_COLS; c++) {
+    //        int index = (r*MAT_COLS)+c;
+    //        if (c == 1) {
+    //            this->m_range_data_array[index] = (TT_DATA) {1.5, 1.5};
+    //        }
+    //        else {
+    //            this->m_range_data_array[index] = (TT_DATA) {0, 0};
+    //        }
+    //    }
+    //}
+
+    //for(int r=0; r<5; r++) {
+    //    for(int c=0; c<5; c++) {
+    //        int index = (r*MAT_COLS) + c;
+    //        printf("this->m_range_data_array[%d][%d] = {%f, %f}\n", r, c, this->m_range_data_array[index].real, this->m_range_data_array[index].imag);
+    //    }
+    //}
+
+    ////TODO: Temporary until we know which ref function to use for range compression
+    //for(int r = 0; r < MAT_ROWS; r++) {
+    //    for(int c = 0; c < MAT_COLS; c++) {
+    //        int index = (r*MAT_COLS)+c;
+    //        this->m_ref_func_array[index] = (TT_DATA) {1, 1};
+    //    }
+    //}
 
     return true;
 }
@@ -289,11 +329,92 @@ bool SARBackproject::fetchRadarData() {
 void SARBackproject::runGraphs() {
     // Run graphs indefinitley (instead of for specific amount of iterations)
     for(int i = 0; i < this->m_instances; i++) {
-        this->m_fft_graph_hdls[i].run(0);
-        this->m_ifft_graph_hdls[i].run(0);
-        this->m_cplx_conj_graph_hdls[i].run(0);
-        this->m_hp_graph_hdls[i].run(0);
+        this->m_bp_graph_hdls[i].run(0);
+        //this->m_fft_graph_hdls[i].run(0);
+        //this->m_ifft_graph_hdls[i].run(0);
+        //this->m_cplx_conj_graph_hdls[i].run(0);
+        //this->m_hp_graph_hdls[i].run(0);
     }
+}
+
+void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
+                        xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
+                        xrt::aie::bo* buffers_xy_px_in, xrt::aie::bo* buffers_rc_in, 
+                        xrt::aie::bo* buffers_img_out, int num_of_buffers) {
+    
+    std::vector<xrt::bo::async_handle> buff_async_hdls;
+    
+    int pulses = 1;
+    int per_bp_byte_size = (TP_POINT_SIZE/IMG_SOLVERS)*sizeof(TT_DATA);
+
+    int32 rtp_valid_low_bound_result[4] = {};
+    int32 rtp_valid_high_bound_result[4] = {};
+
+    for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+        for (int rc_seg = 0; rc_seg < IMG_SOLVERS; rc_seg++) {
+            //printf("rc_seg = %d\n", rc_seg);
+            
+            // Data going to slowtime splicer
+            buffers_x_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_x_ant_pos", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 pulses*sizeof(float), 
+                                                 0);
+            buffers_y_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_y_ant_pos", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 pulses*sizeof(float), 
+                                                 0);
+            buffers_z_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_ant_pos", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 pulses*sizeof(float), 
+                                                 0);
+            buffers_ref_range_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_ref_range", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 pulses*sizeof(float), 
+                                                 0);
+
+            for (int kern_id = 0; kern_id < IMG_SOLVERS; kern_id++) {
+                //printf("kern_id = %d\n", kern_id);
+                buffers_xy_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xy_px[" + std::to_string(kern_id) + "]", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 per_bp_byte_size, 
+                                                 kern_id*per_bp_byte_size);
+
+                buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc[" + std::to_string(kern_id) + "]", 
+                                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                              per_bp_byte_size, 
+                                              (3-rc_seg)*per_bp_byte_size);
+
+                buff_async_hdls.push_back(buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(kern_id) + "]",
+                                                                          XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+                                                                          per_bp_byte_size, 
+                                                                          kern_id*per_bp_byte_size));
+                
+                this->m_bp_graph_hdls[buff_idx].read("bpGraph[" + std::to_string(buff_idx) + "].rtp_valid_low_bound[" + std::to_string(kern_id) + "]", 
+                                                     rtp_valid_low_bound_result[kern_id]);
+                //printf("Low Bound: %d\n", rtp_valid_low_bound_result[kern_id]);
+                this->m_bp_graph_hdls[buff_idx].read("bpGraph[" + std::to_string(buff_idx) + "].rtp_valid_high_bound[" + std::to_string(kern_id) + "]", 
+                                                     rtp_valid_high_bound_result[kern_id]);
+                //printf("High Bound: %d\n", rtp_valid_high_bound_result[kern_id]);
+            }
+
+
+            for(int i=0; i<4; i++) {
+                buff_async_hdls[i].wait();
+                //for(int j=i*2048; j<(i*2048)+8; j++) {
+                //    printf("%d: %f\t%f\n", j, this->m_img_array[j].real, this->m_img_array[j].imag);
+                //}
+            }
+            buff_async_hdls.clear();
+        }
+    }
+
+    // Block until AIE has finished with above operations. Could do other work on 
+    // processor here if needed.
+    //for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
+    //    printf("Waiting on idx%d\n", idx);
+    //    buff_async_hdls[idx].wait();
+    //}
+    //std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void SARBackproject::fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers) {

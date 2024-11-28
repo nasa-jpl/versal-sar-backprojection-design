@@ -307,18 +307,8 @@ class BackProjectionGraph: public graph
         // Slow time splicer kernel module
         kernel sts_km;
 
-        // Differential range kernel module
-        kernel dr_km[DIFFER_RANGE_SOLVERS];
-
-        // Arbiter kernel module
-        kernel arb_km;
-
         // Image reconstruction kernel module
         kernel img_rec_km[IMG_SOLVERS];
-
-        //***** PACKET SWITCHING OBJECTS *****//
-        pktmerge<4> mg;
-        pktsplit<4> sp;
 
     public:
         //***** GMIO PORT OBJECTS *****//
@@ -329,16 +319,15 @@ class BackProjectionGraph: public graph
         input_gmio gmio_in_z_ant_pos;
         input_gmio gmio_in_ref_range;
 
-        // Differential range GMIO ports
-        input_gmio gmio_in_xy_px[DIFFER_RANGE_SOLVERS];
-
         // Image reconstruction GMIO ports
+        input_gmio gmio_in_xy_px[IMG_SOLVERS];
         input_gmio gmio_in_rc[IMG_SOLVERS];
         output_gmio gmio_out_img[IMG_SOLVERS];
             
 
         //***** RTP PORT OBJECTS *****//
-        //input_port range_freq_step[4];
+        inout_port rtp_valid_low_bound[4];
+        inout_port rtp_valid_high_bound[4];
 
         BackProjectionGraph() {
 
@@ -354,22 +343,6 @@ class BackProjectionGraph: public graph
                 img_rec_km[i] = kernel::create_object<ImgReconstruct>(i);
             }
 
-            // Arbiter kernel
-            arb_km = kernel::create(arbiter_kern);
-
-            // Differential range kernel
-            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-                dr_km[i] = kernel::create(differential_range_kern);
-            }
-            
-            //***** PACKET SWITCHING OBJECTS *****//
-            
-            // Differential range merger
-            mg = pktmerge<4>::create();
-
-            // Differential range splitter
-            sp = pktsplit<4>::create();
-
 
             //***** GMIO PORTS *****//
             
@@ -379,13 +352,9 @@ class BackProjectionGraph: public graph
             gmio_in_z_ant_pos = input_gmio::create("gmio_in_z_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
             gmio_in_ref_range = input_gmio::create("gmio_in_ref_range_" + std::to_string(bp_graph_insts), 256, 1000);
 
-            // Differential range GMIO ports
-            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-                gmio_in_xy_px[i] = input_gmio::create("gmio_in_xy_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
-            }
-
             // Image Reconstruct GMIO ports
             for (int i=0; i<IMG_SOLVERS; i++) {
+                gmio_in_xy_px[i] = input_gmio::create("gmio_in_xy_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 gmio_in_rc[i] = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
             }
@@ -400,52 +369,40 @@ class BackProjectionGraph: public graph
             connect(gmio_in_ref_range.out[0], sts_km.in[3]);
 
 
-            // Differential range GMIO connections
-            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-                connect(gmio_in_xy_px[i].out[0], dr_km[i].in[1]);
-            }
-
             // Image reconstruct GMIO connections
             for (int i=0; i<IMG_SOLVERS; i++) {
-                connect(gmio_in_rc[i].out[0], img_rec_km[i].in[0]);
+                connect(gmio_in_xy_px[i].out[0], img_rec_km[i].in[1]);
+                connect(gmio_in_rc[i].out[0], img_rec_km[i].in[2]);
                 connect(img_rec_km[i].out[0], gmio_out_img[i].in[0]);
             }
+
+            //for (int i=0; i<IMG_SOLVERS; i++) {
+            //    int fftshift_id = i-(IMG_SOLVERS/2);
+            //    if (fftshift_id < 0)
+            //        fftshift_id+=IMG_SOLVERS;
+            //    connect(gmio_in_rc[i].out[0], img_rec_km[fftshift_id].in[2]);
+            //}
 
 
             //***** AIE TO AIE CONNECTIONS *****//
 
-            // Slow time splicer to differential range
-            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-                connect(sts_km.out[0], dr_km[i].in[0]);
-            }
-            
-            // Differential range to merge packet switcher
-            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-                connect(dr_km[i].out[0], mg.in[i]);
+            // Slow time splicer to image reconstruction
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                connect(sts_km.out[0], img_rec_km[i].in[0]);
             }
 
-            // Split packet switcher to image reconstruction
+            //***** RTP CONNECTIONS *****//
+            
+            // image reconstruction to valid_bounds RTP param
             for (int i=0; i<IMG_SOLVERS; i++) {
-                connect(sp.out[i], img_rec_km[i].in[1]);
+                connect<parameter>(sync(img_rec_km[i].inout[0]), rtp_valid_low_bound[i]);
+                connect<parameter>(sync(img_rec_km[i].inout[1]), rtp_valid_high_bound[i]);
             }
     
-            //// Merge packet switcher to split packet switcher
-            //// (This creates a router within the AIE to route packets based
-            //// on packet ID in the stream header)
-            //connect(mg.out[0], sp.in[0]);
-
-            // Merge packet switcher to arbiter kernel
-            connect(mg.out[0], arb_km.in[0]);
-
-            // Arbiter kernel to split packet switcher
-            connect(arb_km.out[0], sp.in[0]);
 
             //***** SOURCE FILES *****//
 
             source(sts_km) = "backprojection.cc";
-            source(arb_km) = "backprojection.cc";
-            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++)
-                source(dr_km[i]) = "backprojection.cc";
             for (int i=0; i<IMG_SOLVERS; i++)
                 source(img_rec_km[i]) = "backprojection.cc";
 
@@ -453,9 +410,6 @@ class BackProjectionGraph: public graph
             //***** RUNTIME RATIOS *****//
 
             runtime<ratio>(sts_km) = 1.0;
-            runtime<ratio>(arb_km) = 1.0;
-            for (int i=0; i<DIFFER_RANGE_SOLVERS; i++)
-                runtime<ratio>(dr_km[i]) = 1.0;
             for (int i=0; i<IMG_SOLVERS; i++)
                 runtime<ratio>(img_rec_km[i]) = 1.0;
 
@@ -475,10 +429,5 @@ class BackProjectionGraph: public graph
             //    //connect(img_rec_km[bp_fftshift_id].out[0], gmio_out_img[bp_fftshift_id].in[0]);
             //}
         
-            // RTP Connections
-            //connect<parameter>(range_freq_step[0], img_rec_km[0].in[2]);
-            //connect<parameter>(range_freq_step[1], img_rec_km[1].in[2]);
-            //connect<parameter>(range_freq_step[2], img_rec_km[2].in[2]);
-            //connect<parameter>(range_freq_step[3], img_rec_km[3].in[2]);
         }
 };

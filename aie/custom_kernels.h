@@ -35,11 +35,13 @@ class ImgReconstruct
         static constexpr int ACCUM_PULSES = 1;
 
         ImgReconstruct(int id);
-        void img_reconstruct_kern(input_async_circular_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict rc_in,
-                                  input_pktstream *dr_in,
-                                  output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict img_out);
+        void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+                                  input_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict xy_px_in,
+                                  input_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict rc_in,
+                                  output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict img_out,
+                                  int32 &rtp_valid_low_bound, int32 &rtp_valid_high_bound);
 
-        void generate_pixel_grid(float x_st, float x_en, float y_st, float y_en, float x_grid_len, float y_grid_len);
+        //void generate_pixel_grid(float x_st, float x_en, float y_st, float y_en, float x_grid_len, float y_grid_len);
         static void registerKernelClass()
         { 
             REGISTER_FUNCTION(ImgReconstruct::img_reconstruct_kern);
@@ -48,29 +50,30 @@ class ImgReconstruct
     private:
         uint32 m_id;
         uint32 m_iter;
+        cfloat m_prev_low_rc;
         alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
 
-        void init_radar_params(float range_freq_step, float min_freq);
-        void init_range_grid();
+        //void init_radar_params(float range_freq_step, float min_freq);
+        //void init_range_grid();
         //void init_pixel_grid(float x_st, float x_en, int x_len, float y_st, float y_en, int y_len);
         //void init_pixel_segment();
         //void print_float(const char *str, aie::vector<float,16> data);
         //void print_int32(const char *str, aie::vector<int32,16> data);
         
         // Radar parameters
-        struct RadarParams {
-            float range_freq_step; // Range frequency step size
-            float min_freq;        // Minimum frequency in range line
-            float ph_corr_coef;    // Phase correction coefficient
-        } m_radar_params;
+        //struct RadarParams {
+        //    float range_freq_step; // Range frequency step size
+        //    float min_freq;        // Minimum frequency in range line
+        //    float ph_corr_coef;    // Phase correction coefficient
+        //} m_radar_params;
 
         // Range grid based on signal time delay
-        struct RangeGrid {
-            float range_width;     // Max width scene size of image (in range direction)
-            float range_res;       // Range step size
-            float inv_range_res;   // Inverse range step size
-            float seg_offset;      // Segment offset of samples
-        } m_range_grid;
+        //struct RangeGrid {
+        //    float range_width;     // Max width scene size of image (in range direction)
+        //    float range_res;       // Range step size
+        //    float inv_range_res;   // Inverse range step size
+        //    float seg_offset;      // Segment offset of samples
+        //} m_range_grid;
         
         //// Pixel grid representing the desired target
         //struct PixelGrid {
