@@ -171,12 +171,11 @@ int main(int argc, char ** argv) {
     //    }
     //}
 
-    const int PULSES = 1;
-    float* x_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
-    float* y_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
-    float* z_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
-    float* ref_range_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
-    for(int i = 0; i < PULSES; i++) {
+    float* x_ant_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
+    float* y_ant_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
+    float* z_ant_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
+    float* ref_range_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
+    for(int i = 0; i < IMG_SOLVERS; i++) {
         x_ant_data_array[i] = 7089.2646;
         y_ant_data_array[i] = 0.5289;
         z_ant_data_array[i] = 7275.6719;
@@ -234,51 +233,59 @@ int main(int argc, char ** argv) {
     // Loop through pipeline ITER times
     int inst = 0;
 
+    const int PULSES = 1;
     for(int iter=0; iter<ITER; iter++) {
         printf("\nPERFORM BACKPROJECTION (ITER = %d) (INST = %d)\n", iter, inst);
 
         // Set up AIE graph to specific number of times
-        bpGraph[inst].run(4);
+        //bpGraph[inst].run(4);
         
 
         int per_bp_elem_size = (TP_POINT_SIZE/IMG_SOLVERS);
-        for(int rc_seg=0; rc_seg<IMG_SOLVERS; rc_seg++) {
-            // Pass in data to AIE
-            bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, PULSES*sizeof(float));
-            bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, PULSES*sizeof(float));
-            bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, PULSES*sizeof(float));
-            bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, PULSES*sizeof(float));
 
-            for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
-                bpGraph[inst].gmio_in_xy_px[kern_id].gm2aie_nb(xy_px_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
+        // Pass in data to AIE
 
-                // Send first segment to all image reconstruction kernels
-                bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-rc_seg)*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
-                bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
+        for(int pulse=0; pulse<PULSES; pulse++) {
+            printf("pulse = %d\n", pulse);
+            for(int rc_seg=0; rc_seg<IMG_SOLVERS; rc_seg++) {
+                printf("rc_seg = %d\n", rc_seg);
+                bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, sizeof(float));
+                bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, sizeof(float));
+                bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, sizeof(float));
+                bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, sizeof(float));
+                for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
 
-                // RTP valid bounds
-                bpGraph[inst].read(bpGraph[inst].rtp_valid_low_bound[kern_id], rtp_valid_low_bound_result[kern_id]);
-                bpGraph[inst].read(bpGraph[inst].rtp_valid_high_bound[kern_id], rtp_valid_high_bound_result[kern_id]);
+                    // RTP input pulses
+                    bpGraph[inst].update(bpGraph[inst].rtp_pulses_in[kern_id], PULSES);
+
+                    bpGraph[inst].gmio_in_xy_px[kern_id].gm2aie_nb(xy_px_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
+
+                    // Send first segment to all image reconstruction kernels
+                    bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-rc_seg)*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
+                    bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
+
+                    // RTP valid bounds
+                    //bpGraph[inst].read(bpGraph[inst].rtp_valid_low_bound_out[kern_id], rtp_valid_low_bound_result[kern_id]);
+                    //bpGraph[inst].read(bpGraph[inst].rtp_valid_high_bound_out[kern_id], rtp_valid_high_bound_result[kern_id]);
+                }
+
+                // Block until AIE finishes
+                for(int bp=0; bp<IMG_SOLVERS; bp++) {
+                    //printf("BEFORE WAIT: valid_bounds: [[%d, %d], [%d, %d], [%d, %d], [%d, %d]]\n", rtp_valid_low_bound_result[0], rtp_valid_high_bound_result[0],
+                    //                                                                                rtp_valid_low_bound_result[1], rtp_valid_high_bound_result[1],
+                    //                                                                                rtp_valid_low_bound_result[2], rtp_valid_high_bound_result[2],
+                    //                                                                                rtp_valid_low_bound_result[3], rtp_valid_high_bound_result[3]);
+                    bpGraph[inst].gmio_out_img[bp].wait();
+                    //printf("AFTER WAIT: valid_bounds: [[%d, %d], [%d, %d], [%d, %d], [%d, %d]]\n", rtp_valid_low_bound_result[0], rtp_valid_high_bound_result[0],
+                    //                                                                               rtp_valid_low_bound_result[1], rtp_valid_high_bound_result[1],
+                    //                                                                               rtp_valid_low_bound_result[2], rtp_valid_high_bound_result[2],
+                    //                                                                               rtp_valid_low_bound_result[3], rtp_valid_high_bound_result[3]);
+                }
             }
-
-
-            // Block until AIE finishes
-            for(int bp=0; bp<IMG_SOLVERS; bp++) {
-                printf("BEFORE WAIT: valid_bounds: [[%d, %d], [%d, %d], [%d, %d], [%d, %d]]\n", rtp_valid_low_bound_result[0], rtp_valid_high_bound_result[0],
-                                                                                                rtp_valid_low_bound_result[1], rtp_valid_high_bound_result[1],
-                                                                                                rtp_valid_low_bound_result[2], rtp_valid_high_bound_result[2],
-                                                                                                rtp_valid_low_bound_result[3], rtp_valid_high_bound_result[3]);
-                bpGraph[inst].gmio_out_img[bp].wait();
-                printf("AFTER WAIT: valid_bounds: [[%d, %d], [%d, %d], [%d, %d], [%d, %d]]\n", rtp_valid_low_bound_result[0], rtp_valid_high_bound_result[0],
-                                                                                               rtp_valid_low_bound_result[1], rtp_valid_high_bound_result[1],
-                                                                                               rtp_valid_low_bound_result[2], rtp_valid_high_bound_result[2],
-                                                                                               rtp_valid_low_bound_result[3], rtp_valid_high_bound_result[3]);
-
-            }
-            //TODO: DEBUG
-            for(int i=0; i<128; i++) {
-                printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-            }
+        }
+        //TODO: DEBUG
+        for(int i=0; i<64; i++) {
+            printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }
 
         //for(int i=2048; i<2048+32; i++) {

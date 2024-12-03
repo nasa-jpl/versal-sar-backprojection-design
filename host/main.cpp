@@ -87,105 +87,134 @@ int main(int argc, char ** argv) {
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Run AIE graphs completed (HOST)");
 
+    // Initialize bp xrt::aie::bo buffer arrays 
+    xrt::aie::bo buffers_x_ant_pos_in[INSTANCES];
+    xrt::aie::bo buffers_y_ant_pos_in[INSTANCES];
+    xrt::aie::bo buffers_z_ant_pos_in[INSTANCES];
+    xrt::aie::bo buffers_ref_range_in[INSTANCES];
+    xrt::aie::bo buffers_xy_px_in[INSTANCES];
+    xrt::aie::bo buffers_rc_in[INSTANCES];
+    xrt::aie::bo buffers_img_out[INSTANCES];
+
     // Initialize generic xrt::aie::bo buffer arrays 
-    xrt::aie::bo buffers_in[INSTANCES];
-    xrt::aie::bo buffers_out[INSTANCES];
+    //xrt::aie::bo buffers_in[INSTANCES];
+    //xrt::aie::bo buffers_out[INSTANCES];
 
     // Initialize matrix multiply xrt::aie::bo buffer arrays 
-    xrt::aie::bo buffersA_in[INSTANCES];
-    xrt::aie::bo buffersB_in[INSTANCES];
+    //xrt::aie::bo buffersA_in[INSTANCES];
+    //xrt::aie::bo buffersB_in[INSTANCES];
 
     // Buffer number for telling AIE kernels how many buffers to operate on in parallel
     int buff_num = 1;
 
-    std::cout << "\nReshape reference function for FFT (HOST - OpenMP)..." << std::endl;
+    std::cout << "\nPerform Backprojection (AIE)..." << std::endl;
+    buffers_x_ant_pos_in[0] = ifcc.m_x_ant_pos_buffer;
+    buffers_y_ant_pos_in[0] = ifcc.m_y_ant_pos_buffer;
+    buffers_z_ant_pos_in[0] = ifcc.m_z_ant_pos_buffer;
+    buffers_ref_range_in[0] = ifcc.m_ref_range_buffer;
+    buffers_xy_px_in[0] = ifcc.m_xy_px_buffer;
+    buffers_rc_in[0] = ifcc.m_rc_buffer;
+    buffers_img_out[0] = ifcc.m_img_buffer;
     SARBackproject::startTime();
-    ifcc.reshapeMatrix(ifcc.m_ref_func_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
+    ifcc.bp(buffers_x_ant_pos_in, buffers_y_ant_pos_in, buffers_z_ant_pos_in, buffers_ref_range_in, 
+            buffers_xy_px_in,  buffers_rc_in, buffers_img_out, buff_num);
     SARBackproject::endTime();
-    SARBackproject::printTimeDiff("Reshape completed (HOST - OpenMP)");
-
-    std::cout << "\nFFT on reference function (AIE)..." << std::endl;
-    buffers_in[0] = ifcc.m_ref_func_buffer;
-    buffers_out[0] = ifcc.m_ref_func_buffer;
-    SARBackproject::startTime();
-    ifcc.fft(buffers_in, buffers_out, buff_num);
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("FFT completed (AIE)");
+    SARBackproject::printTimeDiff("Backprojection completed (AIE)");
     
-    //TODO: DEBUG
-    //print_arr(ifcc.m_ref_func_array, 5, 5);
-
-    std::cout << "\nComplex conjugate on reference function (AIE)..." << std::endl;
-    buffers_in[0] = ifcc.m_ref_func_buffer;
-    buffers_out[0] = ifcc.m_ref_func_buffer;
-    SARBackproject::startTime();
-    ifcc.cplxConj(buffers_in, buffers_out, buff_num);
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("Complex conjugate completed (AIE)");
-
-    //TODO: DEBUG
-    //print_arr(ifcc.m_ref_func_array, 5, 5);
-
-    std::cout << "\nReshape range data for FFT (HOST - OpenMP)..." << std::endl;
-    SARBackproject::startTime();
-    ifcc.reshapeMatrix(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("Reshape completed (HOST - OpenMP)");
-
-    std::cout << "\nFFT on range data (AIE)..." << std::endl;
-    buffers_in[0] = ifcc.m_range_data_buffer;
-    buffers_out[0] = ifcc.m_range_data_buffer;
-    SARBackproject::startTime();
-    ifcc.fft(buffers_in, buffers_out, buff_num);
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("FFT completed (AIE)");
-
-    //TODO: DEBUG
-    //print_arr(ifcc.m_range_data_array, 5, 5);
-
-    std::cout << "\nElement-wise matrix multiply between ref function and range data (AIE)..." << std::endl;
-    buffersA_in[0] = ifcc.m_range_data_buffer;
-    buffersB_in[0] = ifcc.m_ref_func_buffer;
-    buffers_out[0] = ifcc.m_range_data_buffer;
-    SARBackproject::startTime();
-    ifcc.elemMatMult(buffersA_in, buffersB_in, buffers_out, buff_num);
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("Element-wise matrix multiply completed (AIE)");
-
-    //TODO: DEBUG
-    //print_arr(ifcc.m_range_data_array, 5, 5);
-
-    std::cout << "\niFFT on range data (AIE)..." << std::endl;
-    buffers_in[0] = ifcc.m_range_data_buffer;
-    buffers_out[0] = ifcc.m_range_data_buffer;
-    SARBackproject::startTime();
-    ifcc.ifft(buffers_in, buffers_out, buff_num);
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("iFFT completed (AIE)");
-
-    //TODO: DEBUG
-    //print_arr(ifcc.m_range_data_array, 5, 5, TP_POINT_SIZE);
-    //ifftErrorCheck(ifcc.m_range_data_array);
-
-    std::cout << "\nReshape range data after IFFT (HOST - OpenMP)..." << std::endl;
-    SARBackproject::startTime();
-    ifcc.reshapeMatrix(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS, true);
-    SARBackproject::endTime();
-    SARBackproject::printTimeDiff("Reshape completed (HOST - OpenMP)");
-
-    TT_DATA bp_ref;
-    for(int az=0; az<MAT_ROWS; az++) {
-        bp_ref = exp((j*4*pi*az)/lambda);
-
-        std::cout << "\nFFT on reference function (AIE)..." << std::endl;
-        buffers_in[0] = ifcc.m_bp_ref_func_buffer;
-        buffers_out[0] = ifcc.m_bp_ref_func_buffer;
-        SARBackproject::startTime();
-        ifcc.fft(buffers_in, buffers_out, buff_num);
-        SARBackproject::endTime();
-        SARBackproject::printTimeDiff("FFT completed (AIE)");
-
+    for(int i=0; i<4; i++) {
+        for(int j=i*2048; j<(i*2048)+8; j++) {
+            printf("%d: %f\t%f\n", j, ifcc.m_img_array[j].real, ifcc.m_img_array[j].imag);
+        }
     }
+
+    //std::cout << "\nReshape reference function for FFT (HOST - OpenMP)..." << std::endl;
+    //SARBackproject::startTime();
+    //ifcc.reshapeMatrix(ifcc.m_ref_func_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("Reshape completed (HOST - OpenMP)");
+
+    //std::cout << "\nFFT on reference function (AIE)..." << std::endl;
+    //buffers_in[0] = ifcc.m_ref_func_buffer;
+    //buffers_out[0] = ifcc.m_ref_func_buffer;
+    //SARBackproject::startTime();
+    //ifcc.fft(buffers_in, buffers_out, buff_num);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("FFT completed (AIE)");
+    //
+    ////TODO: DEBUG
+    ////print_arr(ifcc.m_ref_func_array, 5, 5);
+
+    //std::cout << "\nComplex conjugate on reference function (AIE)..." << std::endl;
+    //buffers_in[0] = ifcc.m_ref_func_buffer;
+    //buffers_out[0] = ifcc.m_ref_func_buffer;
+    //SARBackproject::startTime();
+    //ifcc.cplxConj(buffers_in, buffers_out, buff_num);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("Complex conjugate completed (AIE)");
+
+    ////TODO: DEBUG
+    ////print_arr(ifcc.m_ref_func_array, 5, 5);
+
+    //std::cout << "\nReshape range data for FFT (HOST - OpenMP)..." << std::endl;
+    //SARBackproject::startTime();
+    //ifcc.reshapeMatrix(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("Reshape completed (HOST - OpenMP)");
+
+    //std::cout << "\nFFT on range data (AIE)..." << std::endl;
+    //buffers_in[0] = ifcc.m_range_data_buffer;
+    //buffers_out[0] = ifcc.m_range_data_buffer;
+    //SARBackproject::startTime();
+    //ifcc.fft(buffers_in, buffers_out, buff_num);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("FFT completed (AIE)");
+
+    ////TODO: DEBUG
+    ////print_arr(ifcc.m_range_data_array, 5, 5);
+
+    //std::cout << "\nElement-wise matrix multiply between ref function and range data (AIE)..." << std::endl;
+    //buffersA_in[0] = ifcc.m_range_data_buffer;
+    //buffersB_in[0] = ifcc.m_ref_func_buffer;
+    //buffers_out[0] = ifcc.m_range_data_buffer;
+    //SARBackproject::startTime();
+    //ifcc.elemMatMult(buffersA_in, buffersB_in, buffers_out, buff_num);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("Element-wise matrix multiply completed (AIE)");
+
+    ////TODO: DEBUG
+    ////print_arr(ifcc.m_range_data_array, 5, 5);
+
+    //std::cout << "\niFFT on range data (AIE)..." << std::endl;
+    //buffers_in[0] = ifcc.m_range_data_buffer;
+    //buffers_out[0] = ifcc.m_range_data_buffer;
+    //SARBackproject::startTime();
+    //ifcc.ifft(buffers_in, buffers_out, buff_num);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("iFFT completed (AIE)");
+
+    ////TODO: DEBUG
+    ////print_arr(ifcc.m_range_data_array, 5, 5, TP_POINT_SIZE);
+    ////ifftErrorCheck(ifcc.m_range_data_array);
+
+    //std::cout << "\nReshape range data after IFFT (HOST - OpenMP)..." << std::endl;
+    //SARBackproject::startTime();
+    //ifcc.reshapeMatrix(ifcc.m_range_data_array, MAT_ROWS, MAT_COLS, FFT_NPORTS, true);
+    //SARBackproject::endTime();
+    //SARBackproject::printTimeDiff("Reshape completed (HOST - OpenMP)");
+
+    //TT_DATA bp_ref;
+    //for(int az=0; az<MAT_ROWS; az++) {
+    //    bp_ref = exp((j*4*pi*az)/lambda);
+
+    //    std::cout << "\nFFT on reference function (AIE)..." << std::endl;
+    //    buffers_in[0] = ifcc.m_bp_ref_func_buffer;
+    //    buffers_out[0] = ifcc.m_bp_ref_func_buffer;
+    //    SARBackproject::startTime();
+    //    ifcc.fft(buffers_in, buffers_out, buff_num);
+    //    SARBackproject::endTime();
+    //    SARBackproject::printTimeDiff("FFT completed (AIE)");
+
+    //}
 
     
 

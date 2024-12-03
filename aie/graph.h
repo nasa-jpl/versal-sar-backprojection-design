@@ -326,8 +326,9 @@ class BackProjectionGraph: public graph
             
 
         //***** RTP PORT OBJECTS *****//
-        inout_port rtp_valid_low_bound[4];
-        inout_port rtp_valid_high_bound[4];
+        input_port rtp_pulses_in[IMG_SOLVERS];
+        inout_port rtp_valid_low_bound_out[IMG_SOLVERS];
+        inout_port rtp_valid_high_bound_out[IMG_SOLVERS];
 
         BackProjectionGraph() {
 
@@ -393,10 +394,17 @@ class BackProjectionGraph: public graph
 
             //***** RTP CONNECTIONS *****//
             
-            // image reconstruction to valid_bounds RTP param
+            // Number of pulses to accumulate result over RTP param to image reconstruction
             for (int i=0; i<IMG_SOLVERS; i++) {
-                connect<parameter>(sync(img_rec_km[i].inout[0]), rtp_valid_low_bound[i]);
-                connect<parameter>(sync(img_rec_km[i].inout[1]), rtp_valid_high_bound[i]);
+                connect<parameter>(rtp_pulses_in[i], img_rec_km[i].in[3]);
+            }
+
+            // Image reconstruction to valid_bounds RTP param
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                connect<parameter>(img_rec_km[i].inout[0], rtp_valid_low_bound_out[i]);
+                connect<parameter>(img_rec_km[i].inout[1], rtp_valid_high_bound_out[i]);
+                //connect<parameter>(img_rec_km[i].inout[0], rtp_valid_low_bound_out[i]);
+                //connect<parameter>(img_rec_km[i].inout[1], rtp_valid_high_bound_out[i]);
             }
     
 
