@@ -182,13 +182,13 @@ int main(int argc, char ** argv) {
         ref_range_data_array[i] = 10158.399;
     }
     
-    // Add 1 to accomidate for overlap (helps with interpolation at boundaries)
-    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc((TP_POINT_SIZE+1)*sizeof(TT_DATA));
+    // Add 1 to accommodate for overlap (helps with interpolation at boundaries)
+    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
     for(int i = 0; i < TP_POINT_SIZE; i++) {
         rc_array[i] = (TT_DATA) {i, i};
     }
 
-    TT_DATA* xy_px_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
+    //TT_DATA* xy_px_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
     const float C = 299792458.0;
     float range_freq_step = 1471301.6;
     //float range_freq_step = 5000000.0;
@@ -198,12 +198,11 @@ int main(int argc, char ** argv) {
     float range_width = C/(2.0*range_freq_step);
     float range_res = range_width/TP_POINT_SIZE;
 
-    for(int i = 0; i < TP_POINT_SIZE; i++) {
-        xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
-    }
+    //for(int i = 0; i < TP_POINT_SIZE; i++) {
+    //    xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
+    //}
     
-    //TT_DATA* img_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
-    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(256*sizeof(TT_DATA));
+    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
 
     //for(int r = 0; r < MAT_ROWS; r++) {
     //    for(int c = 0; c < MAT_COLS; c++) {
@@ -253,7 +252,7 @@ int main(int argc, char ** argv) {
             bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, sizeof(float));
             bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, sizeof(float));
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
-                bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*per_bp_elem_size, (per_bp_elem_size+1)*sizeof(TT_DATA));
+                bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
 
                 //bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
             }

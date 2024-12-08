@@ -54,8 +54,8 @@ class SARBackproject {
         float* m_z_ant_pos_array;
         xrt::aie::bo m_ref_range_buffer;
         float* m_ref_range_array;
-        xrt::aie::bo m_xy_px_buffer;
-        TT_DATA* m_xy_px_array;
+        //xrt::aie::bo m_xy_px_buffer;
+        //TT_DATA* m_xy_px_array;
         xrt::aie::bo m_rc_buffer;
         TT_DATA* m_rc_array;
         xrt::aie::bo m_img_buffer;
@@ -82,8 +82,7 @@ class SARBackproject {
         bool fetchRadarData();
         void bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
                 xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
-                xrt::aie::bo* buffers_xy_px_in, xrt::aie::bo* buffers_rc_in, 
-                xrt::aie::bo* buffers_img_out, int num_of_buffers);
+                xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_img_out, int num_of_buffers);
         void fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);

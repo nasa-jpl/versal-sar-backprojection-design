@@ -34,7 +34,7 @@ class ImgReconstruct
 
         ImgReconstruct(int id);
         void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                  input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+                                  input_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict rc_in,
                                   input_stream<TT_DATA>* __restrict img_in, 
                                   output_stream<TT_DATA>* __restrict img_out,
                                   int32 &rtp_img_elem_cnt_out);

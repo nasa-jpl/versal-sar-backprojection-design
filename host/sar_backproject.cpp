@@ -31,8 +31,8 @@ SARBackproject::SARBackproject(const char* xclbin_filename, const char* h5_filen
 , m_z_ant_pos_array(m_z_ant_pos_buffer.map<float*>())
 , m_ref_range_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
 , m_ref_range_array(m_ref_range_buffer.map<float*>())
-, m_xy_px_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
-, m_xy_px_array(m_xy_px_buffer.map<TT_DATA*>())
+//, m_xy_px_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+//, m_xy_px_array(m_xy_px_buffer.map<TT_DATA*>())
 , m_rc_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
 , m_rc_array(m_rc_buffer.map<TT_DATA*>())
 , m_img_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
@@ -291,9 +291,9 @@ bool SARBackproject::fetchRadarData() {
     float range_width = C/(2.0*range_freq_step);
     float range_res = range_width/TP_POINT_SIZE;
 
-    for(int i = 0; i < TP_POINT_SIZE; i++) {
-        this->m_xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
-    }
+    //for(int i = 0; i < TP_POINT_SIZE; i++) {
+    //    this->m_xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
+    //}
 
     ////TODO: DEBUG
     //for(int r = 0; r < MAT_ROWS; r++) {
@@ -339,8 +339,7 @@ void SARBackproject::runGraphs() {
 
 void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
                         xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
-                        xrt::aie::bo* buffers_xy_px_in, xrt::aie::bo* buffers_rc_in, 
-                        xrt::aie::bo* buffers_img_out, int num_of_buffers) {
+                        xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_img_out, int num_of_buffers) {
     
     std::vector<xrt::bo::async_handle> buff_async_hdls;
     
@@ -352,72 +351,70 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
 
     for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
         for (int pulse = 0; pulse < PULSES; pulse++) {
-            for (int rc_seg = 0; rc_seg < IMG_SOLVERS; rc_seg++) {
-                //printf("rc_seg = %d\n", rc_seg);
+            // Data going to slowtime splicer
+            buffers_x_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_x_ant_pos", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 sizeof(float), 
+                                                 0);
+            buffers_y_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_y_ant_pos", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 sizeof(float), 
+                                                 0);
+            buffers_z_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_ant_pos", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 sizeof(float), 
+                                                 0);
+            buffers_ref_range_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_ref_range", 
+                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                 sizeof(float), 
+                                                 0);
                 
-                // Data going to slowtime splicer
-                buffers_x_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_x_ant_pos", 
-                                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                     sizeof(float), 
-                                                     0);
-                buffers_y_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_y_ant_pos", 
-                                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                     sizeof(float), 
-                                                     0);
-                buffers_z_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_ant_pos", 
-                                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                     sizeof(float), 
-                                                     0);
-                buffers_ref_range_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_ref_range", 
-                                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                     sizeof(float), 
-                                                     0);
 
-                for (int kern_id = 0; kern_id < IMG_SOLVERS; kern_id++) {
-                    this->m_bp_graph_hdls[buff_idx].update("bpGraph[" + std::to_string(buff_idx) + "].rtp_pulses_in[" + std::to_string(kern_id) + "]", PULSES);
+            for (int kern_id = 0; kern_id < IMG_SOLVERS; kern_id++) {
+                //this->m_bp_graph_hdls[buff_idx].update("bpGraph[" + std::to_string(buff_idx) + "].rtp_pulses_in[" + std::to_string(kern_id) + "]", PULSES);
 
-                    //printf("kern_id = %d\n", kern_id);
-                    buffers_xy_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xy_px[" + std::to_string(kern_id) + "]", 
-                                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                     per_bp_byte_size, 
-                                                     kern_id*per_bp_byte_size);
+                //printf("kern_id = %d\n", kern_id);
+                //buffers_xy_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xy_px[" + std::to_string(kern_id) + "]", 
+                //                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                //                                 per_bp_byte_size, 
+                //                                 kern_id*per_bp_byte_size);
 
-                    buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc[" + std::to_string(kern_id) + "]", 
-                                                  XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                  per_bp_byte_size, 
-                                                  (3-rc_seg)*per_bp_byte_size);
+                buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc[" + std::to_string(kern_id) + "]", 
+                                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                              per_bp_byte_size, 
+                                              (3-kern_id)*per_bp_byte_size);
 
-                    buff_async_hdls.push_back(buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(kern_id) + "]",
-                                                                              XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                                                              per_bp_byte_size, 
-                                                                              kern_id*per_bp_byte_size));
-                    
-                    //this->m_bp_graph_hdls[buff_idx].read("bpGraph[" + std::to_string(buff_idx) + "].rtp_valid_low_bound_out[" + std::to_string(kern_id) + "]", 
-                    //                                     rtp_valid_low_bound_result[kern_id]);
-                    //printf("Low Bound: %d\n", rtp_valid_low_bound_result[kern_id]);
-                    //this->m_bp_graph_hdls[buff_idx].read("bpGraph[" + std::to_string(buff_idx) + "].rtp_valid_high_bound_out[" + std::to_string(kern_id) + "]", 
-                    //                                     rtp_valid_high_bound_result[kern_id]);
-                    //printf("High Bound: %d\n", rtp_valid_high_bound_result[kern_id]);
-                }
-
-
-                for(int i=0; i<4; i++) {
-                    buff_async_hdls[i].wait();
-                    //for(int j=i*2048; j<(i*2048)+8; j++) {
-                    //    printf("%d: %f\t%f\n", j, this->m_img_array[j].real, this->m_img_array[j].imag);
-                    //}
-                }
-                buff_async_hdls.clear();
+                //this->m_bp_graph_hdls[buff_idx].read("bpGraph[" + std::to_string(buff_idx) + "].rtp_valid_low_bound_out[" + std::to_string(kern_id) + "]", 
+                //                                     rtp_valid_low_bound_result[kern_id]);
+                //printf("Low Bound: %d\n", rtp_valid_low_bound_result[kern_id]);
+                //this->m_bp_graph_hdls[buff_idx].read("bpGraph[" + std::to_string(buff_idx) + "].rtp_valid_high_bound_out[" + std::to_string(kern_id) + "]", 
+                //                                     rtp_valid_high_bound_result[kern_id]);
+                //printf("High Bound: %d\n", rtp_valid_high_bound_result[kern_id]);
             }
+            buff_async_hdls.push_back(buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img",
+                                                                      XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+                                                                      TP_POINT_SIZE*sizeof(TT_DATA), 
+                                                                      0));
+                    
+
+
+            //buff_async_hdls.wait();
+            ////for(int i=0; i<4; i++) {
+            ////    buff_async_hdls[i].wait();
+            ////    //for(int j=i*2048; j<(i*2048)+8; j++) {
+            ////    //    printf("%d: %f\t%f\n", j, this->m_img_array[j].real, this->m_img_array[j].imag);
+            ////    //}
+            ////}
+            //buff_async_hdls.clear();
         }
     }
 
     // Block until AIE has finished with above operations. Could do other work on 
     // processor here if needed.
-    //for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
-    //    printf("Waiting on idx%d\n", idx);
-    //    buff_async_hdls[idx].wait();
-    //}
+    for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
+        printf("Waiting on idx%d\n", idx);
+        buff_async_hdls[idx].wait();
+    }
     //std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
