@@ -181,8 +181,9 @@ int main(int argc, char ** argv) {
         z_ant_data_array[i] = 7275.6719;
         ref_range_data_array[i] = 10158.399;
     }
-
-    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
+    
+    // Add 1 to accomidate for overlap (helps with interpolation at boundaries)
+    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc((TP_POINT_SIZE+1)*sizeof(TT_DATA));
     for(int i = 0; i < TP_POINT_SIZE; i++) {
         rc_array[i] = (TT_DATA) {i, i};
     }
@@ -201,7 +202,8 @@ int main(int argc, char ** argv) {
         xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
     }
     
-    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
+    //TT_DATA* img_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
+    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(256*sizeof(TT_DATA));
 
     //for(int r = 0; r < MAT_ROWS; r++) {
     //    for(int c = 0; c < MAT_COLS; c++) {
@@ -227,8 +229,7 @@ int main(int argc, char ** argv) {
     //print_arr(gold_data_array, 2, 5);
 
     // RTP Params
-    int32 rtp_valid_low_bound_result[4] = {};
-    int32 rtp_valid_high_bound_result[4] = {};
+    int32 rtp_img_elem_cnt_result[4] = {};
    
     // Loop through pipeline ITER times
     int inst = 0;
@@ -241,49 +242,47 @@ int main(int argc, char ** argv) {
         //bpGraph[inst].run(4);
         
 
-        int per_bp_elem_size = (TP_POINT_SIZE/IMG_SOLVERS);
+        int per_bp_elem_size = TP_POINT_SIZE/IMG_SOLVERS;
 
         // Pass in data to AIE
 
         for(int pulse=0; pulse<PULSES; pulse++) {
             printf("pulse = %d\n", pulse);
-            for(int rc_seg=0; rc_seg<IMG_SOLVERS; rc_seg++) {
-                printf("rc_seg = %d\n", rc_seg);
-                bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, sizeof(float));
-                bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, sizeof(float));
-                bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, sizeof(float));
-                bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, sizeof(float));
-                for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
+            bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, sizeof(float));
+            bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, sizeof(float));
+            bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, sizeof(float));
+            bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, sizeof(float));
+            for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
+                bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*per_bp_elem_size, (per_bp_elem_size+1)*sizeof(TT_DATA));
 
-                    // RTP input pulses
-                    bpGraph[inst].update(bpGraph[inst].rtp_pulses_in[kern_id], PULSES);
-
-                    bpGraph[inst].gmio_in_xy_px[kern_id].gm2aie_nb(xy_px_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
-
-                    // Send first segment to all image reconstruction kernels
-                    bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-rc_seg)*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
-                    bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
-
-                    // RTP valid bounds
-                    //bpGraph[inst].read(bpGraph[inst].rtp_valid_low_bound_out[kern_id], rtp_valid_low_bound_result[kern_id]);
-                    //bpGraph[inst].read(bpGraph[inst].rtp_valid_high_bound_out[kern_id], rtp_valid_high_bound_result[kern_id]);
-                }
-
-                // Block until AIE finishes
-                for(int bp=0; bp<IMG_SOLVERS; bp++) {
-                    //printf("BEFORE WAIT: valid_bounds: [[%d, %d], [%d, %d], [%d, %d], [%d, %d]]\n", rtp_valid_low_bound_result[0], rtp_valid_high_bound_result[0],
-                    //                                                                                rtp_valid_low_bound_result[1], rtp_valid_high_bound_result[1],
-                    //                                                                                rtp_valid_low_bound_result[2], rtp_valid_high_bound_result[2],
-                    //                                                                                rtp_valid_low_bound_result[3], rtp_valid_high_bound_result[3]);
-                    bpGraph[inst].gmio_out_img[bp].wait();
-                    //printf("AFTER WAIT: valid_bounds: [[%d, %d], [%d, %d], [%d, %d], [%d, %d]]\n", rtp_valid_low_bound_result[0], rtp_valid_high_bound_result[0],
-                    //                                                                               rtp_valid_low_bound_result[1], rtp_valid_high_bound_result[1],
-                    //                                                                               rtp_valid_low_bound_result[2], rtp_valid_high_bound_result[2],
-                    //                                                                               rtp_valid_low_bound_result[3], rtp_valid_high_bound_result[3]);
-                }
+                //bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
             }
+
+            bpGraph[inst].gmio_out_img.aie2gm_nb(img_array, TP_POINT_SIZE*sizeof(TT_DATA));
+
+            for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
+                // RTP header idx
+                bpGraph[inst].read(bpGraph[inst].rtp_img_elem_cnt_out[kern_id], rtp_img_elem_cnt_result[kern_id]);
+                printf("rtp_img_elem_cnt_result[%d] = %d\n", kern_id, rtp_img_elem_cnt_result[kern_id]);
+            }
+
+            bpGraph[inst].gmio_out_img.wait();
+            printf("after wait sig\n");
+            //for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
+            //    bpGraph[inst].gmio_out_img[kern_id].wait();
+            //    printf("after wait sig\n");
+            //}
+
+
+            //int pkt_header_id = *(unsigned int*)&img_array[0].real & 0x1F;
+            //printf("array[%d] = %d\n", 0,  pkt_header_id);
+
         }
         //TODO: DEBUG
+        //printf("array[%d] = 0x%08x\n", 0,  *(unsigned int*)&img_array[0].real);
+        //printf("array[%d] = 0x%08x\n", 10, *(unsigned int*)&img_array[10].imag);
+        //printf("array[%d] = 0x%08x\n", 34, *(unsigned int*)&img_array[34].real);
+        //printf("array[%d] = 0x%08x\n", 56, *(unsigned int*)&img_array[56].imag);
         for(int i=0; i<64; i++) {
             printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }

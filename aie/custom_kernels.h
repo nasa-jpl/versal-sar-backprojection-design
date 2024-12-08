@@ -19,6 +19,11 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
                            input_buffer<float, extents<1>>& __restrict ref_range_in,
                            output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out);
 
+//void arbiter_kern(input_pktstream *in, output_stream<int> *__restrict out);
+//void arbiter_kern(input_pktstream *in, output_pktstream *out);
+
+void dummy_kern(output_stream<TT_DATA>* __restrict img_out);
+
 class ImgReconstruct
 {
     public:
@@ -29,10 +34,10 @@ class ImgReconstruct
 
         ImgReconstruct(int id);
         void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                  input_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict xy_px_in,
-                                  input_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict rc_in,
-                                  output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict img_out,
-                                  int32 rtp_pulses_in, int32 &rtp_valid_low_bound_out, int32 &rtp_valid_high_bound_out);
+                                  input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+                                  input_stream<TT_DATA>* __restrict img_in, 
+                                  output_stream<TT_DATA>* __restrict img_out,
+                                  int32 &rtp_img_elem_cnt_out);
 
         static void registerKernelClass()
         { 
@@ -43,7 +48,89 @@ class ImgReconstruct
         uint32 m_id;
         uint32 m_iter;
         cfloat m_prev_low_rc;
-        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
-
+        cfloat m_prev_img_val;
+        //alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
 };
 
+//class ImgReconstructA
+//{
+//    public:
+//        static constexpr float PI = 3.1415926535898;
+//        static constexpr float TWO_PI = 6.2831853071796;
+//        static constexpr float INV_TWO_PI = 0.15915494309189;
+//        static constexpr float C = 299792458.0;
+//
+//        ImgReconstructA(int id);
+//        void img_reconstruct_kern_a(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+//                                    input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+//                                    output_stream<TT_DATA>* __restrict img_out,
+//                                    int32 &rtp_img_elem_cnt_out);
+//
+//        static void registerKernelClass()
+//        { 
+//            REGISTER_FUNCTION(ImgReconstructA::img_reconstruct_kern_a);
+//        }
+//
+//    private:
+//        uint32 m_id;
+//        uint32 m_iter;
+//        cfloat m_prev_low_rc;
+//        cfloat m_prev_img_val;
+//        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
+//};
+//
+//class ImgReconstructB
+//{
+//    public:
+//        static constexpr float PI = 3.1415926535898;
+//        static constexpr float TWO_PI = 6.2831853071796;
+//        static constexpr float INV_TWO_PI = 0.15915494309189;
+//        static constexpr float C = 299792458.0;
+//
+//        ImgReconstructB(int id);
+//        void img_reconstruct_kern_b(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+//                                    input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+//                                    input_stream<TT_DATA>* __restrict img_in, 
+//                                    output_stream<TT_DATA>* __restrict img_out,
+//                                    int32 &rtp_img_elem_cnt_out);
+//
+//        static void registerKernelClass()
+//        { 
+//            REGISTER_FUNCTION(ImgReconstructB::img_reconstruct_kern_b);
+//        }
+//
+//    private:
+//        uint32 m_id;
+//        uint32 m_iter;
+//        cfloat m_prev_low_rc;
+//        cfloat m_prev_img_val;
+//        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
+//};
+//
+//class ImgReconstructC
+//{
+//    public:
+//        static constexpr float PI = 3.1415926535898;
+//        static constexpr float TWO_PI = 6.2831853071796;
+//        static constexpr float INV_TWO_PI = 0.15915494309189;
+//        static constexpr float C = 299792458.0;
+//
+//        ImgReconstructC(int id);
+//        void img_reconstruct_kern_c(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+//                                    input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+//                                    input_stream<TT_DATA>* __restrict img_in, 
+//                                    output_stream<TT_DATA>* __restrict img_out,
+//                                    int32 &rtp_img_elem_cnt_out);
+//
+//        static void registerKernelClass()
+//        { 
+//            REGISTER_FUNCTION(ImgReconstructC::img_reconstruct_kern_c);
+//        }
+//
+//    private:
+//        uint32 m_id;
+//        uint32 m_iter;
+//        cfloat m_prev_low_rc;
+//        cfloat m_prev_img_val;
+//        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
+//};

@@ -21,11 +21,11 @@
 //#define TP_POINT_SIZE 8192
 //#define MAT_ROWS 4394
 
-#define TP_POINT_SIZE 8192
+//#define TP_POINT_SIZE 8192
 //#define MAT_ROWS 11539
 
-//#define TP_POINT_SIZE 64
-#define MAT_ROWS 2
+#define TP_POINT_SIZE 64
+#define MAT_ROWS 1
 #define MAT_COLS TP_POINT_SIZE
 //#define TMPL_MAT_ROWS TP_POINT_SIZE/8
 //#define TMPL_MAT_COLS TP_POINT_SIZE/8
@@ -215,6 +215,10 @@
 
 // Number of segments that the range compressed data is divided into
 //#define RC_SEGMENTS 4
+
+// Number of azimuth samples
+#define AZ_POINT_SIZE 4000
+
 
 // Number of image reconstruction solvers
 #define IMG_SOLVERS 4
