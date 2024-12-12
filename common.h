@@ -217,7 +217,7 @@
 //#define RC_SEGMENTS 4
 
 // Number of azimuth samples
-#define AZ_POINT_SIZE 4000
+#define AZ_POINT_SIZE 500
 
 
 // Number of image reconstruction solvers

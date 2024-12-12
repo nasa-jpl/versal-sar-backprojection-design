@@ -23,19 +23,19 @@ SARBackproject::SARBackproject(const char* xclbin_filename, const char* h5_filen
 , m_instances(instances)
 , m_device(0)
 , m_uuid(m_device.load_xclbin(this->m_xclbin_filename))
-, m_x_ant_pos_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_x_ant_pos_buffer(m_device, sizeof(float), xrt::bo::flags::normal, 0)
 , m_x_ant_pos_array(m_x_ant_pos_buffer.map<float*>())
-, m_y_ant_pos_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_y_ant_pos_buffer(m_device, sizeof(float), xrt::bo::flags::normal, 0)
 , m_y_ant_pos_array(m_y_ant_pos_buffer.map<float*>())
-, m_z_ant_pos_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_z_ant_pos_buffer(m_device, sizeof(float), xrt::bo::flags::normal, 0)
 , m_z_ant_pos_array(m_z_ant_pos_buffer.map<float*>())
-, m_ref_range_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_ref_range_buffer(m_device, sizeof(float), xrt::bo::flags::normal, 0)
 , m_ref_range_array(m_ref_range_buffer.map<float*>())
 //, m_xy_px_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
 //, m_xy_px_array(m_xy_px_buffer.map<TT_DATA*>())
-, m_rc_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_rc_buffer(m_device, TP_POINT_SIZE*sizeof(TT_DATA), xrt::bo::flags::normal, 0)
 , m_rc_array(m_rc_buffer.map<TT_DATA*>())
-, m_img_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
+, m_img_buffer(m_device, AZ_POINT_SIZE*TP_POINT_SIZE*sizeof(TT_DATA), xrt::bo::flags::normal, 0)
 , m_img_array(m_img_buffer.map<TT_DATA*>())
 //, m_range_data_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
 //, m_range_data_array(m_range_data_buffer.map<TT_DATA*>())
@@ -393,9 +393,8 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
             }
             buff_async_hdls.push_back(buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img",
                                                                       XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                                                      TP_POINT_SIZE*sizeof(TT_DATA), 
+                                                                      AZ_POINT_SIZE*TP_POINT_SIZE*sizeof(TT_DATA), 
                                                                       0));
-                    
 
 
             //buff_async_hdls.wait();
@@ -409,10 +408,11 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
         }
     }
 
+
     // Block until AIE has finished with above operations. Could do other work on 
     // processor here if needed.
     for(int idx = 0; idx < buff_async_hdls.size(); idx++) {
-        printf("Waiting on idx%d\n", idx);
+        //printf("Waiting on idx%d\n", idx);
         buff_async_hdls[idx].wait();
     }
     //std::this_thread::sleep_for(std::chrono::seconds(1));

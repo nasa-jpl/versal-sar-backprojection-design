@@ -202,7 +202,9 @@ int main(int argc, char ** argv) {
     //    xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
     //}
     
-    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
+    int img_elem_size = AZ_POINT_SIZE*TP_POINT_SIZE;
+    int img_byte_size = img_elem_size*sizeof(TT_DATA);
+    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(img_byte_size);
 
     //for(int r = 0; r < MAT_ROWS; r++) {
     //    for(int c = 0; c < MAT_COLS; c++) {
@@ -244,7 +246,7 @@ int main(int argc, char ** argv) {
         int per_bp_elem_size = TP_POINT_SIZE/IMG_SOLVERS;
 
         // Pass in data to AIE
-
+        
         for(int pulse=0; pulse<PULSES; pulse++) {
             printf("pulse = %d\n", pulse);
             bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, sizeof(float));
@@ -257,7 +259,7 @@ int main(int argc, char ** argv) {
                 //bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
             }
 
-            bpGraph[inst].gmio_out_img.aie2gm_nb(img_array, TP_POINT_SIZE*sizeof(TT_DATA));
+            bpGraph[inst].gmio_out_img.aie2gm_nb(img_array, img_byte_size);
 
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
                 // RTP header idx
@@ -282,7 +284,7 @@ int main(int argc, char ** argv) {
         //printf("array[%d] = 0x%08x\n", 10, *(unsigned int*)&img_array[10].imag);
         //printf("array[%d] = 0x%08x\n", 34, *(unsigned int*)&img_array[34].real);
         //printf("array[%d] = 0x%08x\n", 56, *(unsigned int*)&img_array[56].imag);
-        for(int i=0; i<64; i++) {
+        for(int i=0; i<img_elem_size; i++) {
             printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }
 

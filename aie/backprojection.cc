@@ -73,6 +73,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     float total_az = 0.01726837;
     float az_res = C/(2.0*total_az*min_freq);
     float az_width = AZ_POINT_SIZE/az_res;
+    //float az_width = 108.4105;
 
     // Initialize range and azimuth grid
     int half_size = TP_POINT_SIZE/2;
@@ -83,17 +84,21 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
 
     float start_range_px = -range_width/2;
     float end_range_px = range_width/2;
-    float start_az_px = -az_width/2.0;
-    float end_az_px = az_width/2.0;
+    float start_az_px = az_width/2.0;
+    float end_az_px = -az_width/2.0;
 
     //printf("start_range_px = %f | end_range_px = %f | start_az_px = %f | end_az_px = %f\n", start_range_px, end_range_px, start_az_px, end_az_px);
 
-    //aie::vector<float,16> y_pxls_vec = aie::broadcast<float,16>(start_az_px);
-    aie::vector<float,16> y_pxls_vec = aie::broadcast<float,16>(0.0f);
+    aie::vector<float,16> y_pxls_vec = aie::broadcast<float,16>(start_az_px);
+    //aie::vector<float,16> y_pxls_vec = aie::broadcast<float,16>(0.0f);
     aie::vector<float,16> x_pxls_vec;
     for(int i=0; i<16; i++) {
         x_pxls_vec.set(start_range_px + i*range_res, i);
     }
+
+    // Save x_pxls_vec since we will be needing to loop back to start for all y axis points
+    alignas(aie::vector_decl_align) float x_pxls_start[16];
+    x_pxls_vec.store(x_pxls_start);
 
     //printf("%d IMG_RECON: x_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
     //        x_pxls_vec.get(0),  x_pxls_vec.get(1),  x_pxls_vec.get(2),  x_pxls_vec.get(3), 
@@ -163,21 +168,11 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     bool prev_in_loop = false;
     int elem_cnt = 0;
     TT_DATA prev_kern_low_rc_bound;
-    //for(int y_idx=0; y_idx < AZ_POINT_SIZE/16; y_idx++) chess_prepare_for_pipelining {
-    for(int y_idx=0; y_idx < 1; y_idx++) chess_prepare_for_pipelining {
-        //for(int x_idx=0; x_idx < seg_size/16; x_idx++) chess_prepare_for_pipelining {
+    for(int y_idx=0; y_idx < AZ_POINT_SIZE; y_idx++) chess_prepare_for_pipelining {
         for(int x_idx=0; x_idx < TP_POINT_SIZE/16; x_idx++) chess_prepare_for_pipelining {
-
-            //auto xy_px_vec = *xy_in_iter++;
-            //auto x_pxls_vec = aie::real(xy_px_vec);
-            //auto y_pxls_vec = aie::imag(xy_px_vec);
-            //printf("%d IMG_RECON: x_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-            //        x_pxls_vec.get(0),  x_pxls_vec.get(1),  x_pxls_vec.get(2),  x_pxls_vec.get(3), 
-            //        x_pxls_vec.get(4),  x_pxls_vec.get(5),  x_pxls_vec.get(6),  x_pxls_vec.get(7),
-            //        x_pxls_vec.get(8),  x_pxls_vec.get(9),  x_pxls_vec.get(10), x_pxls_vec.get(11), 
-            //        x_pxls_vec.get(12), x_pxls_vec.get(13), x_pxls_vec.get(14), x_pxls_vec.get(15));
             
-            // Calculate differential range for pixel segments
+            /**** CALCULATE DIFFERENTIAL RANGE FOR PIXEL SEGMENTS ****/
+            // Calculate this on host to corr pixels to rc...calc boundaries/extremes instead of the whole thing on host
             auto x_vec = aie::sub(x_ant, x_pxls_vec);
             auto x_diff_sq_acc = aie::mul_square(x_vec);
 
@@ -191,7 +186,26 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
 
             auto differ_range_vec = aie::sub(xyz_sqrt_acc, r0).to_vector<float>(0);
 
-            // Calculate phase correction for image
+            // Calculate the approximate index for differ_range_vec in the equally spaced range grid
+            auto px_idx_acc = aie::mul(inv_range_res, differ_range_vec);
+
+            // Shift indices to align with proper range compressed samples
+            px_idx_acc = aie::add(px_idx_acc, (float)(half_size));
+
+            // Round to nearest whole number
+            auto low_idx_float_vec = aie::sub(px_idx_acc, 0.5f).to_vector<float>(0);
+            auto low_idx_int_vec = aie::to_fixed<int32>(low_idx_float_vec);
+            auto high_idx_int_vec = aie::add(low_idx_int_vec, 1);
+
+            // Determine proper boundary of pixel to see if this AI kernel instance even 
+            // has the range compressed samples to support the rest of the calculation.
+            // Higher values in the pixel vector = lower value pixel indices
+            if ((low_idx_int_vec.get(15) > high_px_idx_bound) || (high_idx_int_vec.get(0) < low_px_idx_bound)) {
+                x_pxls_vec = aie::add(x_pxls_vec, range_res*16);
+                continue;
+            }
+
+            //**** CALCULATE PHASE CORRECTION FOR IMAGE ****//
             auto ph_corr_angle_vec = aie::mul(ph_corr_coef, differ_range_vec).to_vector<float>(0);
 
             // Floor round to neg infinity by casting to int32, then back to float for later operations
@@ -211,30 +225,14 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
             auto ph_corr_real = aie::real(ph_corr_vec);
             auto ph_corr_imag = aie::imag(ph_corr_vec);
             
-            // Calculate the approximate index for differ_range_vec in the equally spaced range grid
-            auto px_idx_acc = aie::mul(inv_range_res, differ_range_vec);
-
-            // Shift indices to align with proper range compressed samples
-            px_idx_acc = aie::add(px_idx_acc, (float)(half_size));
-
-
-            auto low_idx_float_vec = aie::sub(px_idx_acc, 0.5f).to_vector<float>(0);
-
-            // Round to nearest whole number
-            auto low_idx_int_vec = aie::to_fixed<int32>(low_idx_float_vec);
-            auto high_idx_int_vec = aie::add(low_idx_int_vec, 1);
-            low_idx_float_vec = aie::to_float(low_idx_int_vec);
-
             // Fractional part for interpolation
+            low_idx_float_vec = aie::to_float(low_idx_int_vec);
             auto px_delta_idx_vec = aie::sub(px_idx_acc, low_idx_float_vec).to_vector<float>(0);
 
             auto shifted_high_idx_int_vec = aie::sub(high_idx_int_vec, low_px_idx_bound);
             auto shifted_low_idx_int_vec = aie::sub(low_idx_int_vec, low_px_idx_bound);
             cfloat rc_delta;
             for(int i=0; i<16; i++) chess_prepare_for_pipelining {
-
-                //TODO: PERFORM CHECKING BEFORE THIS POINT IN VECTOR OPS SO WE DON'T HAVE TO ITERATE THOUGH ALL PIXELS. THIS POINT
-                // SHOULD ONLY BE FOR CHECKING BOUNDS WITHIN A VECTOR OF INTEREST ITSELF
                 if (low_idx_int_vec.get(i) >= low_px_idx_bound && high_idx_int_vec.get(i) <= high_px_idx_bound) {
                     //printf("%d: shifted_low_idx_int_vec.get(%d): %d\n", m_id, i, shifted_low_idx_int_vec.get(i));
                     //if (!first_valid_px_idx) {
@@ -279,8 +277,8 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
                     auto px_rc_delta = rc_delta*(float)(px_delta_idx_vec.get(i));
                     auto interp = px_rc_delta+rc_in_iter[shifted_low_idx_int_vec.get(i)];
 
-                    //auto img = interp*ph_corr_vec.get(i);
-                    auto img = interp;
+                    auto img = interp*ph_corr_vec.get(i);
+                    //auto img = interp;
                     
                     // Save previous low rc data in case it's needed for the next rc segment
                     //m_prev_low_rc = rc_in_iter[shifted_low_idx_int_vec.get(i)];
@@ -299,10 +297,17 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
             x_pxls_vec = aie::add(x_pxls_vec, range_res*16);
         }
         
+        // Write out TLAST on last image element
         if (prev_in_loop)
             writeincr(img_out, m_prev_img_val, true);
+
+        y_pxls_vec = aie::sub(y_pxls_vec, az_res);
         
+        // Start back at beginning of x pixels
+        x_pxls_vec.load(x_pxls_start);
+        prev_in_loop = false;
     }
+
 
     rtp_img_elem_cnt_out = elem_cnt;
     //m_iter++;
