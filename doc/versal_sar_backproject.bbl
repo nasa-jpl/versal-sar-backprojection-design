@@ -1,0 +1,19 @@
+\begin{thebibliography}{1}
+
+\bibitem{AMD_Versal_WP505}
+AMD.
+\newblock Versal: The first adaptive compute acceleration platform (acap).
+\newblock White Paper WP505, 2020.
+\newblock
+  (\href{https://www.xilinx.com/support/documentation/white_papers/wp505-versal-acap.pdf}{pdf}).
+  AMD formerly Xilinx.
+
+\bibitem{Jansing_SAR_Concepts}
+E.~David Jansing.
+\newblock {\em {Introduction to Synthetic Aperture Radar: Concepts and
+  Practice}}.
+\newblock McGraw-Hill, 2021.
+\newblock
+  (\href{https://www.accessengineeringlibrary.com/content/book/9781260458961}{web}).
+
+\end{thebibliography}
