@@ -1,0 +1,59 @@
+% =============================================================================
+\section{Introduction}
+% =============================================================================
+\label{sec:intro}
+
+% -----------------------------------------------------------------------------
+% Versal Architecture
+% -----------------------------------------------------------------------------
+\begin{figure}[hbtp]
+  \begin{center}
+    \includegraphics[width=\textwidth]
+    {figures/versal_arch.png}
+  \end{center}
+  \caption{Versal ACAP Functional Diagram ~\cite{AMD_Versal_WP505}}
+  \label{fig:versal_arch}
+\end{figure}
+% -----------------------------------------------------------------------------
+
+Synthetic Aperture Radar (SAR) is a high-resolution imaging technique
+that exploits the motion of a radar antenna over a target region to
+synthesize a large effective aperture~\cite{Jansing_SAR_Concepts}. By 
+transmitting pulses and recording the backscattered echoes at multiple
+positions along its path, SAR systems collect data that can be
+processed into detailed scene images. The key advantage of SAR is its 
+ability to achieve fine resolution in both range and cross-range,
+making it essential for remote sensing tasks such as Earth observation, 
+surveillance, and environmental monitoring.
+
+Among various SAR image formation methods, backprojection is a
+conceptually straightforward yet computationally intensive approach.
+It coherently sums the radar returns for each image pixel, applying
+appropriate time shifts (or phase corrections) to align signal energy
+across the collected pulses. This effectively recreates the reflected
+energy distribution, yielding high-quality images resilient to motion
+errors, off-nominal geometries, and wide-band signals. However,
+backprojection has a computational load proportional to the product of
+the number of pulses and the number of pixels, which can be expensive
+to implement at scale.
+
+This work presents the design and implementation of a SAR backprojection
+pipeline on the Versal ACAP (Adaptive Compute Acceleration Platform) from
+AMD. The Versal ACAP is a heterogeneous compute environment featuring
+Scalar Engines (CPUs), Adaptable Engines (FPGA/programmable logic), and
+Intelligent Engines (AI and DSP cores), which allow developers to
+accelerate compute-heavy tasks \cite{AMD_Versal_WP505}. 
+
+This current implementation is designed to evaluate the performance
+potential of the AI Engine (AIE) in SAR backprojection. It primarily
+relies on AIE processing, with the ARM Cortex-A72 processor managing
+execution flow and kernel configurations for the AIE. This approach
+isolates and analyzes the AIE's contribution without involving other 
+processing resources like the FPGA or DSP engines. Future work may explore
+utilizing these additional resources. Currently, the implementation is
+in its infancy and focuses on capturing performance metrics for a
+single pulse at various azimuth image lines. While multi-pulse
+processing is possible within the current framework, full validation of
+the results across multiple pulses is challenging due to the large
+volume of data generated.
+
