@@ -22,7 +22,7 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
 //void arbiter_kern(input_pktstream *in, output_stream<int> *__restrict out);
 //void arbiter_kern(input_pktstream *in, output_pktstream *out);
 
-void dummy_kern(output_stream<TT_DATA>* __restrict img_out);
+//void dummy_kern(output_stream<TT_DATA>* __restrict img_out);
 
 class ImgReconstruct
 {
@@ -33,11 +33,12 @@ class ImgReconstruct
         static constexpr float C = 299792458.0;
 
         ImgReconstruct(int id);
-        void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                  input_async_buffer<TT_DATA, extents<TP_POINT_SIZE/4>>& __restrict rc_in,
-                                  input_stream<TT_DATA>* __restrict img_in, 
-                                  output_stream<TT_DATA>* __restrict img_out,
-                                  int32 &rtp_img_elem_cnt_out);
+        void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS*1>>& __restrict slowtime_in,
+                                  input_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict xy_px_in,
+                                  input_buffer<float, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict z_px_in,
+                                  input_async_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict rc_in,
+                                  output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict img_out,
+                                  int rtp_rc_idx_offset_in, int rtp_dump_img_in);
 
         static void registerKernelClass()
         { 
@@ -46,10 +47,10 @@ class ImgReconstruct
 
     private:
         uint32 m_id;
-        uint32 m_iter;
-        cfloat m_prev_low_rc;
-        cfloat m_prev_img_val;
-        //alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
+        //uint32 m_iter;
+        //cfloat m_prev_low_rc;
+        //cfloat m_prev_img_val;
+        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/IMG_SOLVERS];
 };
 
 //class ImgReconstructA

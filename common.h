@@ -21,10 +21,10 @@
 //#define TP_POINT_SIZE 8192
 //#define MAT_ROWS 4394
 
-#define TP_POINT_SIZE 8192
+//#define TP_POINT_SIZE 8192
 //#define MAT_ROWS 11539
 
-//#define TP_POINT_SIZE 64
+#define TP_POINT_SIZE 128
 #define MAT_ROWS 1
 #define MAT_COLS TP_POINT_SIZE
 //#define TMPL_MAT_ROWS TP_POINT_SIZE/8
@@ -217,7 +217,9 @@
 //#define RC_SEGMENTS 4
 
 // Number of azimuth samples
-#define AZ_POINT_SIZE 500
+#define AZ_POINT_SIZE 1
+
+#define PX_SIZE 8
 
 
 // Number of image reconstruction solvers
@@ -228,6 +230,7 @@
 // Y position of antenna 
 // Z position of antenna 
 // Range to center of scene (ref_range)
+// Range compressed index offset for AI tiles
 #define ST_ELEMENTS 4
 
 #endif // COMMON_H
