@@ -31,7 +31,7 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
 }
 
 // Only needed to satisfy a port connection to img_reconstruct_kern 
-//void dummy_kern(output_stream<TT_DATA>* __restrict img_out) {}
+//void dummy_kern(output_stream<cfloat>* __restrict img_out) {}
 
 ImgReconstruct::ImgReconstruct(int id)
 : m_id(id)
@@ -40,11 +40,11 @@ ImgReconstruct::ImgReconstruct(int id)
 //, m_prev_img_val((cfloat){0.0f, 0.0f})
 {}
 
-void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS*1>>& __restrict slowtime_in,
-                                          input_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict xy_px_in,
-                                          input_buffer<float, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict z_px_in,
-                                          input_async_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict rc_in,
-                                          output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict img_out,
+void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+                                          input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
+                                          input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
+                                          input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                                          output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                           int rtp_rc_idx_offset_in, int rtp_dump_img_in) {
 
     // Setup header for packet switcher
@@ -61,20 +61,20 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     //rtp_header_idx_out = -1;
 
     // Initalize m_img (don't need to do this if keeping track of valid bounds via RTP params)
-    //auto zero_init_vec = aie::zeros<TT_DATA, 16>();
-    //for(int i=0; i<TP_POINT_SIZE/IMG_SOLVERS/16; i++) {
+    //auto zero_init_vec = aie::zeros<cfloat, 16>();
+    //for(int i=0; i<RC_SAMPLES/IMG_SOLVERS/16; i++) {
     //    zero_init_vec.store(m_img + i*16);
     //}
 
     // Initialize radar params
-    float min_freq = 9288080400.0;
-    float ph_corr_coef = (4*PI*min_freq)/C;
+    //float min_freq = 9288080400.0;
+    float ph_corr_coef = (4*PI*MIN_FREQ)/C;
     
-    // TODO: inv_range_res SHOULD BE PASSED IN AS RTP
-    float range_freq_step = 1471301.6;
-    float range_width = C/(2.0*range_freq_step);
-    float range_res = range_width/TP_POINT_SIZE;
-    float inv_range_res = 1.0/range_res;
+    //// TODO: inv_range_res SHOULD BE PASSED IN AS RTP
+    //float range_freq_step = 1471301.6;
+    //float range_width = C/(2.0*range_freq_step);
+    //float range_res = range_width/RC_SAMPLES;
+    //float inv_range_res = 1.0/range_res;
 
     //float total_az = 0.01726837;
     //float az_res = C/(2.0*total_az*min_freq);
@@ -82,8 +82,8 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     ////float az_width = 108.4105;
 
     //// Initialize range and azimuth grid
-    int half_size = TP_POINT_SIZE/2;
-    int seg_size = TP_POINT_SIZE/IMG_SOLVERS;
+    int half_size = RC_SAMPLES/2;
+    //int seg_size = RC_SAMPLES/IMG_SOLVERS;
 
     //int low_px_idx_bound = (seg_size*3)-(m_id*seg_size);
     //int high_px_idx_bound = (seg_size*4)-(m_id*seg_size);
@@ -105,12 +105,6 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     //// Save x_pxls_vec since we will be needing to loop back to start for all y axis points
     //alignas(aie::vector_decl_align) float x_pxls_start[16];
     //x_pxls_vec.store(x_pxls_start);
-
-    //printf("%d IMG_RECON: x_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-    //        x_pxls_vec.get(0),  x_pxls_vec.get(1),  x_pxls_vec.get(2),  x_pxls_vec.get(3), 
-    //        x_pxls_vec.get(4),  x_pxls_vec.get(5),  x_pxls_vec.get(6),  x_pxls_vec.get(7),
-    //        x_pxls_vec.get(8),  x_pxls_vec.get(9),  x_pxls_vec.get(10), x_pxls_vec.get(11), 
-    //        x_pxls_vec.get(12), x_pxls_vec.get(13), x_pxls_vec.get(14), x_pxls_vec.get(15));
 
     //cfloat xy_px
     //for(int i=0; i<16; i++) {
@@ -172,8 +166,8 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     //bool first_valid_px_idx = false;
     //bool prev_in_loop = false;
     int elem_cnt = 0;
-    //TT_DATA prev_kern_low_rc_bound;
-    for(int tp_pt_idx=0; tp_pt_idx < TP_POINT_SIZE/IMG_SOLVERS/16; tp_pt_idx++) chess_prepare_for_pipelining {
+    //cfloat prev_kern_low_rc_bound;
+    for(int px_seg_idx=0; px_seg_idx < (PULSES*RC_SAMPLES)/IMG_SOLVERS/16; px_seg_idx++) chess_prepare_for_pipelining {
         // TODO: I THINK A AI TILE NEEDS TO BE ABLE TO ITERATE MORE THAN JUST ITS "SEGMENT" SIZE
         
         // Extract x, y and z pixel vectors
@@ -187,6 +181,11 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
         //        x_pxls_vec.get(4),  x_pxls_vec.get(5),  x_pxls_vec.get(6),  x_pxls_vec.get(7),
         //        x_pxls_vec.get(8),  x_pxls_vec.get(9),  x_pxls_vec.get(10), x_pxls_vec.get(11), 
         //        x_pxls_vec.get(12), x_pxls_vec.get(13), x_pxls_vec.get(14), x_pxls_vec.get(15));
+        //printf("%d IMG_RECON: y_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //        y_pxls_vec.get(0),  y_pxls_vec.get(1),  y_pxls_vec.get(2),  y_pxls_vec.get(3), 
+        //        y_pxls_vec.get(4),  y_pxls_vec.get(5),  y_pxls_vec.get(6),  y_pxls_vec.get(7),
+        //        y_pxls_vec.get(8),  y_pxls_vec.get(9),  y_pxls_vec.get(10), y_pxls_vec.get(11), 
+        //        y_pxls_vec.get(12), y_pxls_vec.get(13), y_pxls_vec.get(14), y_pxls_vec.get(15));
         
         /**** CALCULATE DIFFERENTIAL RANGE FOR PIXEL SEGMENTS ****/
         // Calculate this on host to corr pixels to rc...calc boundaries/extremes instead of the whole thing on host
@@ -212,7 +211,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
         //        differ_range_vec.get(12), differ_range_vec.get(13), differ_range_vec.get(14), differ_range_vec.get(15));
 
         // Calculate the approximate index for differ_range_vec in the equally spaced range grid
-        auto px_idx_acc = aie::mul(inv_range_res, differ_range_vec);
+        auto px_idx_acc = aie::mul(INV_RANGE_RES, differ_range_vec);
 
         // Shift indices to align with proper range compressed samples
         px_idx_acc = aie::add(px_idx_acc, (float)(half_size));
@@ -240,23 +239,130 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
 
         //**** CALCULATE PHASE CORRECTION FOR IMAGE ****//
         auto ph_corr_angle_vec = aie::mul(ph_corr_coef, differ_range_vec).to_vector<float>(0);
+        //printf("%d IMG_RECON: ph_corr_coef = %f\n", m_id, ph_corr_coef);
+        //printf("%d IMG_RECON: ph_corr_angle_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //        ph_corr_angle_vec.get(0),  
+        //        ph_corr_angle_vec.get(1),  
+        //        ph_corr_angle_vec.get(2),  
+        //        ph_corr_angle_vec.get(3), 
+        //        ph_corr_angle_vec.get(4),  
+        //        ph_corr_angle_vec.get(5),  
+        //        ph_corr_angle_vec.get(6),  
+        //        ph_corr_angle_vec.get(7), 
+        //        ph_corr_angle_vec.get(8), 
+        //        ph_corr_angle_vec.get(9),  
+        //        ph_corr_angle_vec.get(10), 
+        //        ph_corr_angle_vec.get(11), 
+        //        ph_corr_angle_vec.get(12), 
+        //        ph_corr_angle_vec.get(13), 
+        //        ph_corr_angle_vec.get(14), 
+        //        ph_corr_angle_vec.get(15));
 
+        // Figure out the number of times 2*PI goes into ph_corr_angle_vec. 
         // Floor round to neg infinity by casting to int32, then back to float for later operations
+        //auto ph_corr_angle_vec_add_pi = aie::add(ph_corr_angle_vec, PI);
         auto num_pi_wrapped_acc = aie::mul(INV_TWO_PI, ph_corr_angle_vec);
         auto num_pi_wrapped_floor_vec = aie::sub(num_pi_wrapped_acc, 0.5f).to_vector<float>(0);
-        auto num_pi_wrapped_int_vec = aie::to_fixed<int32>(num_pi_wrapped_floor_vec);
+        auto num_pi_wrapped_int_vec = aie::to_fixed<int32>(num_pi_wrapped_floor_vec); // Round to nearest whole number
         num_pi_wrapped_floor_vec = aie::to_float(num_pi_wrapped_int_vec);
-        
+        //printf("%d IMG_RECON: num_pi_wrapped_floor_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //        num_pi_wrapped_floor_vec.get(0),  
+        //        num_pi_wrapped_floor_vec.get(1),  
+        //        num_pi_wrapped_floor_vec.get(2),  
+        //        num_pi_wrapped_floor_vec.get(3), 
+        //        num_pi_wrapped_floor_vec.get(4),  
+        //        num_pi_wrapped_floor_vec.get(5),  
+        //        num_pi_wrapped_floor_vec.get(6),  
+        //        num_pi_wrapped_floor_vec.get(7), 
+        //        num_pi_wrapped_floor_vec.get(8), 
+        //        num_pi_wrapped_floor_vec.get(9),  
+        //        num_pi_wrapped_floor_vec.get(10), 
+        //        num_pi_wrapped_floor_vec.get(11), 
+        //        num_pi_wrapped_floor_vec.get(12), 
+        //        num_pi_wrapped_floor_vec.get(13), 
+        //        num_pi_wrapped_floor_vec.get(14), 
+        //        num_pi_wrapped_floor_vec.get(15));
+
         // Scale down ph_corr_angle to be within valid domain for sin/cos operation (must be between -PI to PI; modulus doesn't exist)
-        auto scale_down_angle_acc = aie::negmul(TWO_PI, num_pi_wrapped_floor_vec);
-        scale_down_angle_acc = aie::sub(scale_down_angle_acc, PI);
-        ph_corr_angle_vec = aie::add(scale_down_angle_acc, ph_corr_angle_vec).to_vector<float>(0);
+        auto scale_down_angle_acc = aie::negmul(TWO_PI, num_pi_wrapped_floor_vec); //tmp1
+        scale_down_angle_acc = aie::sub(scale_down_angle_acc, PI); //tmp2
+        //auto tmp = scale_down_angle_acc.to_vector<float>(0);
+        //printf("%d IMG_RECON: REDUCED scale_down_angle_acc=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //        tmp.get(0),  
+        //        tmp.get(1),  
+        //        tmp.get(2),  
+        //        tmp.get(3), 
+        //        tmp.get(4),  
+        //        tmp.get(5),  
+        //        tmp.get(6),  
+        //        tmp.get(7), 
+        //        tmp.get(8), 
+        //        tmp.get(9),  
+        //        tmp.get(10), 
+        //        tmp.get(11), 
+        //        tmp.get(12), 
+        //        tmp.get(13), 
+        //        tmp.get(14), 
+        //        tmp.get(15));
+        ph_corr_angle_vec = aie::add(scale_down_angle_acc, ph_corr_angle_vec).to_vector<float>(0); //tmp3
+        //printf("%d IMG_RECON: REDUCED ph_corr_angle_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //        ph_corr_angle_vec.get(0),  
+        //        ph_corr_angle_vec.get(1),  
+        //        ph_corr_angle_vec.get(2),  
+        //        ph_corr_angle_vec.get(3), 
+        //        ph_corr_angle_vec.get(4),  
+        //        ph_corr_angle_vec.get(5),  
+        //        ph_corr_angle_vec.get(6),  
+        //        ph_corr_angle_vec.get(7), 
+        //        ph_corr_angle_vec.get(8), 
+        //        ph_corr_angle_vec.get(9),  
+        //        ph_corr_angle_vec.get(10), 
+        //        ph_corr_angle_vec.get(11), 
+        //        ph_corr_angle_vec.get(12), 
+        //        ph_corr_angle_vec.get(13), 
+        //        ph_corr_angle_vec.get(14), 
+        //        ph_corr_angle_vec.get(15));
+        //phCorr = exp(1i*4*pi*(data.minF(ii)/c)*dR)
+        //float ph_corr_coef = (4*PI*min_freq)/C;
 
         // Calculate the sin and cos of ph_corr_angle and store as a cfloat (cos in the real part, sin in the imaginary)
         auto ph_corr_vec = aie::sincos_complex(ph_corr_angle_vec);
         ph_corr_vec = aie::neg(ph_corr_vec);
         auto ph_corr_real = aie::real(ph_corr_vec);
         auto ph_corr_imag = aie::imag(ph_corr_vec);
+        //printf("%d IMG_RECON: ph_corr=[{%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}, {%f, %f}]\n", m_id, 
+        //        ph_corr_real.get(0),  
+        //        ph_corr_imag.get(0),  
+        //        ph_corr_real.get(1),  
+        //        ph_corr_imag.get(1),  
+        //        ph_corr_real.get(2),  
+        //        ph_corr_imag.get(2),  
+        //        ph_corr_real.get(3), 
+        //        ph_corr_imag.get(3),  
+        //        ph_corr_real.get(4),  
+        //        ph_corr_imag.get(4),  
+        //        ph_corr_real.get(5),  
+        //        ph_corr_imag.get(5),  
+        //        ph_corr_real.get(6),  
+        //        ph_corr_imag.get(6),  
+        //        ph_corr_real.get(7), 
+        //        ph_corr_imag.get(7),  
+        //        ph_corr_real.get(8), 
+        //        ph_corr_imag.get(8),  
+        //        ph_corr_real.get(9),  
+        //        ph_corr_imag.get(9),  
+        //        ph_corr_real.get(10), 
+        //        ph_corr_imag.get(10),  
+        //        ph_corr_real.get(11), 
+        //        ph_corr_imag.get(11),  
+        //        ph_corr_real.get(12), 
+        //        ph_corr_imag.get(12),  
+        //        ph_corr_real.get(13), 
+        //        ph_corr_imag.get(13),  
+        //        ph_corr_real.get(14), 
+        //        ph_corr_imag.get(14),  
+        //        ph_corr_real.get(15),
+        //        ph_corr_imag.get(15)); 
         
         // Fractional part for interpolation
         low_idx_float_vec = aie::to_float(low_idx_int_vec);
@@ -273,7 +379,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
         //        shifted_low_idx_int_vec.get(8),  shifted_low_idx_int_vec.get(9),  shifted_low_idx_int_vec.get(10), shifted_low_idx_int_vec.get(11), 
         //        shifted_low_idx_int_vec.get(12), shifted_low_idx_int_vec.get(13), shifted_low_idx_int_vec.get(14), shifted_low_idx_int_vec.get(15));
         cfloat rc_delta;
-        for(int i=0; i<16; i++) chess_prepare_for_pipelining {
+        for(int px_idx=0; px_idx<16; px_idx++) chess_prepare_for_pipelining {
             //if (low_idx_int_vec.get(i) >= low_px_idx_bound && high_idx_int_vec.get(i) <= high_px_idx_bound) {
             //printf("%d: shifted_low_idx_int_vec.get(%d): %d\n", m_id, i, shifted_low_idx_int_vec.get(i));
             //
@@ -310,17 +416,17 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
             //else
             //    rc_delta = rc_in_iter[shifted_high_idx_int_vec.get(i)] - rc_in_iter[shifted_low_idx_int_vec.get(i)];
 
-            rc_delta = rc_in_iter[shifted_high_idx_int_vec.get(i)] - rc_in_iter[shifted_low_idx_int_vec.get(i)];
-            auto px_rc_delta = rc_delta*(float)(px_delta_idx_vec.get(i));
-            auto interp = px_rc_delta+rc_in_iter[shifted_low_idx_int_vec.get(i)];
+            rc_delta = rc_in_iter[shifted_high_idx_int_vec.get(px_idx)] - rc_in_iter[shifted_low_idx_int_vec.get(px_idx)];
+            auto px_rc_delta = rc_delta*(float)(px_delta_idx_vec.get(px_idx));
+            auto interp = px_rc_delta+rc_in_iter[shifted_low_idx_int_vec.get(px_idx)];
 
-            auto img = interp*ph_corr_vec.get(i);
+            auto img = interp*ph_corr_vec.get(px_idx);
             //auto img = interp;
-            //printf("%d: idx=%d\n", m_id, (m_id*(TP_POINT_SIZE/IMG_SOLVERS))+(tp_pt_idx*16 + i));
+            //printf("%d: idx=%d\n", m_id, (m_id*(RC_SAMPLES/IMG_SOLVERS))+(px_seg_idx*16 + i));
             
-            //printf("%d: img[%d] = %f, %f\n", m_id, (tp_pt_idx*16) + i, aie::real(img), aie::imag(img));
-            m_img[(tp_pt_idx*16) + i] += img;
-            //printf("%d: m_img[%d] = %f, %f\n", m_id, (tp_pt_idx*16) + i, m_img[(tp_pt_idx*16) + i].real, m_img[(tp_pt_idx*16) + i].imag);
+            //printf("%d: img[%d] = %f, %f\n", m_id, (px_seg_idx*16) + i, aie::real(img), aie::imag(img));
+            m_img[(px_seg_idx*16) + px_idx] += img;
+            //printf("%d: m_img[%d] = %f, %f\n", m_id, (px_seg_idx*16) + i, m_img[(px_seg_idx*16) + i].real, m_img[(px_seg_idx*16) + i].imag);
             
             // Save previous low rc data in case it's needed for the next rc segment
             //m_prev_low_rc = rc_in_iter[shifted_low_idx_int_vec.get(i)];
@@ -356,19 +462,18 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     // TODO: I THINK THE IMG_OUT_ITER OUTPUT IS READING FALSE DATA BECAUSE THE PRINT IS RIGHT.
     auto img_iter = aie::begin_vector<16>(m_img);
     //aie::vector<cfloat,16> test = aie::broadcast<cfloat,16>((cfloat) {5.0f, 5.0f});
-    for(int i=0; i<((TP_POINT_SIZE/IMG_SOLVERS)/16); i++) {
-        auto my_img = *img_iter++;
-        auto tmp = aie::real(my_img);
+    for(int i=0; i<(((PULSES*RC_SAMPLES)/IMG_SOLVERS)/16); i++) {
+        //auto my_img = *img_iter++;
+        //auto tmp = aie::real(my_img);
         
-        printf("%d IMG_RECON: m_img=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-                tmp.get(0),  tmp.get(1),  tmp.get(2),  tmp.get(3), 
-                tmp.get(4),  tmp.get(5),  tmp.get(6),  tmp.get(7),
-                tmp.get(8),  tmp.get(9),  tmp.get(10), tmp.get(11), 
-                tmp.get(12), tmp.get(13), tmp.get(14), tmp.get(15));
+        //printf("%d IMG_RECON: m_img=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //        tmp.get(0),  tmp.get(1),  tmp.get(2),  tmp.get(3), 
+        //        tmp.get(4),  tmp.get(5),  tmp.get(6),  tmp.get(7),
+        //        tmp.get(8),  tmp.get(9),  tmp.get(10), tmp.get(11), 
+        //        tmp.get(12), tmp.get(13), tmp.get(14), tmp.get(15));
         if (rtp_dump_img_in) {
-            //*img_out_iter++ = *img_iter++;
-            *img_out_iter++ = my_img;
-            //*img_out_iter++ = test;
+            *img_out_iter++ = *img_iter++;
+            //*img_out_iter++ = my_img;
         }
     }
 

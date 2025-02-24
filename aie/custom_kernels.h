@@ -10,8 +10,8 @@
 
 using namespace adf;
 
-void cplx_conj_kern(input_buffer<TT_DATA, extents<2048>>& __restrict in, 
-                    output_buffer<TT_DATA, extents<2048>>& __restrict out);
+void cplx_conj_kern(input_buffer<cfloat, extents<2048>>& __restrict in, 
+                    output_buffer<cfloat, extents<2048>>& __restrict out);
 
 void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict y_ant_pos_in,
@@ -22,22 +22,17 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
 //void arbiter_kern(input_pktstream *in, output_stream<int> *__restrict out);
 //void arbiter_kern(input_pktstream *in, output_pktstream *out);
 
-//void dummy_kern(output_stream<TT_DATA>* __restrict img_out);
+//void dummy_kern(output_stream<cfloat>* __restrict img_out);
 
 class ImgReconstruct
 {
     public:
-        static constexpr float PI = 3.1415926535898;
-        static constexpr float TWO_PI = 6.2831853071796;
-        static constexpr float INV_TWO_PI = 0.15915494309189;
-        static constexpr float C = 299792458.0;
-
         ImgReconstruct(int id);
-        void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS*1>>& __restrict slowtime_in,
-                                  input_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict xy_px_in,
-                                  input_buffer<float, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict z_px_in,
-                                  input_async_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict rc_in,
-                                  output_async_buffer<TT_DATA, extents<TP_POINT_SIZE/IMG_SOLVERS>>& __restrict img_out,
+        void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+                                  input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
+                                  input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
+                                  input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                                  output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                   int rtp_rc_idx_offset_in, int rtp_dump_img_in);
 
         static void registerKernelClass()
@@ -50,7 +45,7 @@ class ImgReconstruct
         //uint32 m_iter;
         //cfloat m_prev_low_rc;
         //cfloat m_prev_img_val;
-        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/IMG_SOLVERS];
+        alignas(aie::vector_decl_align) cfloat m_img[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
 };
 
 //class ImgReconstructA
@@ -63,8 +58,8 @@ class ImgReconstruct
 //
 //        ImgReconstructA(int id);
 //        void img_reconstruct_kern_a(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-//                                    input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
-//                                    output_stream<TT_DATA>* __restrict img_out,
+//                                    input_async_buffer<cfloat, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+//                                    output_stream<cfloat>* __restrict img_out,
 //                                    int32 &rtp_img_elem_cnt_out);
 //
 //        static void registerKernelClass()
@@ -77,7 +72,7 @@ class ImgReconstruct
 //        uint32 m_iter;
 //        cfloat m_prev_low_rc;
 //        cfloat m_prev_img_val;
-//        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
+//        alignas(aie::vector_decl_align) cfloat m_img[TP_POINT_SIZE/4];
 //};
 //
 //class ImgReconstructB
@@ -90,9 +85,9 @@ class ImgReconstruct
 //
 //        ImgReconstructB(int id);
 //        void img_reconstruct_kern_b(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-//                                    input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
-//                                    input_stream<TT_DATA>* __restrict img_in, 
-//                                    output_stream<TT_DATA>* __restrict img_out,
+//                                    input_async_buffer<cfloat, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+//                                    input_stream<cfloat>* __restrict img_in, 
+//                                    output_stream<cfloat>* __restrict img_out,
 //                                    int32 &rtp_img_elem_cnt_out);
 //
 //        static void registerKernelClass()
@@ -105,7 +100,7 @@ class ImgReconstruct
 //        uint32 m_iter;
 //        cfloat m_prev_low_rc;
 //        cfloat m_prev_img_val;
-//        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
+//        alignas(aie::vector_decl_align) cfloat m_img[TP_POINT_SIZE/4];
 //};
 //
 //class ImgReconstructC
@@ -118,9 +113,9 @@ class ImgReconstruct
 //
 //        ImgReconstructC(int id);
 //        void img_reconstruct_kern_c(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-//                                    input_async_buffer<TT_DATA, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
-//                                    input_stream<TT_DATA>* __restrict img_in, 
-//                                    output_stream<TT_DATA>* __restrict img_out,
+//                                    input_async_buffer<cfloat, extents<(TP_POINT_SIZE/4)+1>>& __restrict rc_in,
+//                                    input_stream<cfloat>* __restrict img_in, 
+//                                    output_stream<cfloat>* __restrict img_out,
 //                                    int32 &rtp_img_elem_cnt_out);
 //
 //        static void registerKernelClass()
@@ -133,5 +128,5 @@ class ImgReconstruct
 //        uint32 m_iter;
 //        cfloat m_prev_low_rc;
 //        cfloat m_prev_img_val;
-//        alignas(aie::vector_decl_align) TT_DATA m_img[TP_POINT_SIZE/4];
+//        alignas(aie::vector_decl_align) cfloat m_img[TP_POINT_SIZE/4];
 //};
