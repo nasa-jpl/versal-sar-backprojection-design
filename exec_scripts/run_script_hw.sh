@@ -24,11 +24,14 @@ export XILINX_XRT=/usr
 #./sar_backproject_xrt.elf a.xclbin "$file_path" "$file_path"
 
 # Check if exactly one argument is provided
-if [ "$#" -ne 1 ]; then
-	echo "Usage: $0 <iterations>"
+if [ "$#" -ne 4 ]; then
+	echo "Usage: $0 <slowtime dataset csv file> <range compressed dataset csv file> <img out csv file> <iteration>"
 	exit 1
 fi
 
 # Get the data type and matrix dimension from the arguments
-iter=$1
-./sar_backproject.elf a.xclbin ./test_data/REE_L0B_out17.h5 "$iter"
+st_csv_file=$1
+rc_csv_file=$2
+img_out_csv_file=$3
+iter=$4
+./sar_backproject.elf a.xclbin $st_csv_file $rc_csv_file $img_out_csv_file $iter

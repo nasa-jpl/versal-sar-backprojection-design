@@ -30,13 +30,18 @@ const int INSTANCES = 1;
 BackProjectionGraph bpGraph[INSTANCES];
 
 #if defined(__AIESIM__) || defined(__X86SIM__)
+//#include "math.h"
+#include <chrono>
+#include <thread>
+#include <regex>
+#include <unistd.h>
 
-const float EPSILON = 0.0001;
-const int BLOCK_SIZE_ENTRIES = MAT_ROWS*MAT_COLS;
-const int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(TT_DATA);
+//const float EPSILON = 0.0001;
+//const int BLOCK_SIZE_ENTRIES = MAT_ROWS*MAT_COLS;
+//const int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(cfloat);
 
 // FFT output should all be FFT_SAMPLE_DATA for both real and imaginary
-//int fftErrorCheck(TT_DATA* data_array) {
+//int fftErrorCheck(cfloat* data_array) {
 //    int error_cnt = 0;
 //    float real, imag;
 //
@@ -58,74 +63,97 @@ const int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(TT_DATA);
 //    return error_cnt;
 //}
 
-int ifftErrorCheck(TT_DATA* data_array, TT_DATA* gold_data_array) {
-    int error_cnt = 0;
-    float real, imag;
-    float gold_real, gold_imag;
+//int ifftErrorCheck(cfloat* data_array, cfloat* gold_data_array) {
+//    int error_cnt = 0;
+//    float real, imag;
+//    float gold_real, gold_imag;
+//
+//    for(int r = 0; r < MAT_ROWS; r++) {
+//        for(int c = 0; c < MAT_COLS; c++) {
+//            int index = (r*MAT_COLS)+c;
+//            real = data_array[index].real/TP_POINT_SIZE;
+//            imag = data_array[index].imag/TP_POINT_SIZE;
+//            gold_real = gold_data_array[index].real;
+//            //gold_imag = -gold_data_array[index].imag; // Adding negative to accommodate for complx conjugation
+//            gold_imag = gold_data_array[index].imag; // Adding negative to accommodate for complx conjugation
+//            //printf("IFFT[%d, %d] = {%f, %f}\n", r, c, real, imag);
+//
+//            if(std::abs(real-gold_real) > EPSILON || std::abs(imag-gold_imag) > EPSILON) {
+//                printf("ERROR IFFT[%d, %d] = {%f, %f} | EXPECTED {%f, %f}\n", r, c, real, imag, gold_real, gold_imag);
+//                error_cnt++;
+//            }
+//        }
+//    }
+//
+//    printf("IFFT ERRORS: %d\n\n", error_cnt);
+//
+//    return error_cnt;
+//}
+//
+//void print_arr(cfloat* arr, int num_rows, int num_cols) {
+//    for(int r=0; r<num_rows; r++) {
+//        for(int c=0; c<num_cols; c++) {
+//            int index = (r*MAT_COLS) + c;
+//            printf("array[%d][%d] = {%f, %f}\n", r, c, arr[index].real, arr[index].imag);
+//        }
+//    }
+//}
+//
+//void reorderDataArray(cfloat* data_array) {
+//    // Create a temporary array to hold the rearranged data
+//    cfloat* temp = (cfloat*) GMIO::malloc(BLOCK_SIZE_BYTES);
+//    
+//    // Rearrange the data into the temp array
+//    int chunk_size = MAT_COLS;
+//    int num_datasets = BLOCK_SIZE_ENTRIES / chunk_size;
+//
+//    for (int dataset = 0; dataset < num_datasets; dataset++) {
+//        int offset = dataset * chunk_size;
+//
+//        for (int i = 0; i < chunk_size; i++) {
+//            int new_index = offset + (i / 4) + (i % 4) * (chunk_size / 4);
+//            temp[new_index] = data_array[offset + i];
+//        }
+//    }
+//
+//    // Copy the rearranged data back into the original array
+//    for (int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
+//        data_array[i] = temp[i];
+//    }
+//
+//    printf("\nFLIPPED DATA_ARRAY\n");
+//    for(int r=0; r<MAT_ROWS; r++) {
+//        for(int c=0; c<MAT_COLS; c++) {
+//            int index = (r*MAT_COLS) + c;
+//            printf("data_array[%d][%d] = {%f, %f}\n", r, c, data_array[index].real, data_array[index].imag);
+//        }
+//    }
+//
+//    // Free the temporary array
+//    free(temp);
+//}
 
-    for(int r = 0; r < MAT_ROWS; r++) {
-        for(int c = 0; c < MAT_COLS; c++) {
-            int index = (r*MAT_COLS)+c;
-            real = data_array[index].real/TP_POINT_SIZE;
-            imag = data_array[index].imag/TP_POINT_SIZE;
-            gold_real = gold_data_array[index].real;
-            //gold_imag = -gold_data_array[index].imag; // Adding negative to accommodate for complx conjugation
-            gold_imag = gold_data_array[index].imag; // Adding negative to accommodate for complx conjugation
-            //printf("IFFT[%d, %d] = {%f, %f}\n", r, c, real, imag);
-
-            if(std::abs(real-gold_real) > EPSILON || std::abs(imag-gold_imag) > EPSILON) {
-                printf("ERROR IFFT[%d, %d] = {%f, %f} | EXPECTED {%f, %f}\n", r, c, real, imag, gold_real, gold_imag);
-                error_cnt++;
-            }
-        }
+void unwrap(double* angles) {
+    // Store the first original angle for difference calculations.
+    double prev_orig = angles[0];
+    // The first angle remains unchanged.
+    for (int i = 1; i < PULSES; i++) {
+        // Save the current original value before modifying it.
+        double current_orig = angles[i];
+        double diff = current_orig - prev_orig;
+        // Wrap diff into the range [-pi, pi)
+        double dp = fmod(diff + PI, TWO_PI);
+        if (dp < 0)
+            dp += TWO_PI;
+        dp -= PI;
+        // Adjust the edge case: if dp == -pi and diff > 0, set dp to pi.
+        if (dp == -PI && diff > 0)
+            dp = PI;
+        // The new (unwrapped) angle is the previous unwrapped angle plus dp.
+        angles[i] = angles[i - 1] + dp;
+        // Update prev_orig to the original value before modification.
+        prev_orig = current_orig;
     }
-
-    printf("IFFT ERRORS: %d\n\n", error_cnt);
-
-    return error_cnt;
-}
-
-void print_arr(TT_DATA* arr, int num_rows, int num_cols) {
-    for(int r=0; r<num_rows; r++) {
-        for(int c=0; c<num_cols; c++) {
-            int index = (r*MAT_COLS) + c;
-            printf("array[%d][%d] = {%f, %f}\n", r, c, arr[index].real, arr[index].imag);
-        }
-    }
-}
-
-void reorderDataArray(TT_DATA* data_array) {
-    // Create a temporary array to hold the rearranged data
-    TT_DATA* temp = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
-    
-    // Rearrange the data into the temp array
-    int chunk_size = MAT_COLS;
-    int num_datasets = BLOCK_SIZE_ENTRIES / chunk_size;
-
-    for (int dataset = 0; dataset < num_datasets; dataset++) {
-        int offset = dataset * chunk_size;
-
-        for (int i = 0; i < chunk_size; i++) {
-            int new_index = offset + (i / 4) + (i % 4) * (chunk_size / 4);
-            temp[new_index] = data_array[offset + i];
-        }
-    }
-
-    // Copy the rearranged data back into the original array
-    for (int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
-        data_array[i] = temp[i];
-    }
-
-    printf("\nFLIPPED DATA_ARRAY\n");
-    for(int r=0; r<MAT_ROWS; r++) {
-        for(int c=0; c<MAT_COLS; c++) {
-            int index = (r*MAT_COLS) + c;
-            printf("data_array[%d][%d] = {%f, %f}\n", r, c, data_array[index].real, data_array[index].imag);
-        }
-    }
-
-    // Free the temporary array
-    free(temp);
 }
 
 int main(int argc, char ** argv) {
@@ -151,66 +179,157 @@ int main(int argc, char ** argv) {
     }
    
     // Allocating memory
-    //std::vector<TT_DATA*> data_arrays;
+    //std::vector<cfloat*> data_arrays;
     //for(int inst=0; inst<INSTANCES; inst++) {
-    //    data_arrays.push_back((TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES));
+    //    data_arrays.push_back((cfloat*) GMIO::malloc(BLOCK_SIZE_BYTES));
     //}
-    //TT_DATA* one_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
+    //cfloat* one_array = (cfloat*) GMIO::malloc(BLOCK_SIZE_BYTES);
 
     // Allocate and populate memory
-    //TT_DATA* gold_data_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
+    //cfloat* gold_data_array = (cfloat*) GMIO::malloc(BLOCK_SIZE_BYTES);
     //for(int r = 0; r < MAT_ROWS; r++) {
     //    for(int c = 0; c < MAT_COLS; c++) {
     //        int index = (r*MAT_COLS)+c;
     //        if (c == 1) {
-    //            gold_data_array[index] = (TT_DATA) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
+    //            gold_data_array[index] = (cfloat) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
     //        }
     //        else {
-    //            gold_data_array[index] = (TT_DATA) {0, 0};
+    //            gold_data_array[index] = (cfloat) {0, 0};
     //        }
     //    }
     //}
 
-    float* x_ant_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
-    float* y_ant_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
-    float* z_ant_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
-    float* ref_range_data_array = (float*) GMIO::malloc(IMG_SOLVERS*sizeof(float));
-    for(int i = 0; i < IMG_SOLVERS; i++) {
-        x_ant_data_array[i] = 7089.2646;
-        y_ant_data_array[i] = 0.5289;
-        z_ant_data_array[i] = 7275.6719;
-        ref_range_data_array[i] = 10158.399;
+    // OPEN SAR DATASET FILES
+    float* x_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    float* y_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    float* z_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    float* ref_range_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    
+    // Current working dir inside build/hw/aiesim/
+    std::ifstream st_file("../../../design/test_data/gotcha_slowtime_pass1_360deg_HH.csv");
+    if (!st_file.is_open()) {
+        std::cerr << "Error opening st_file dataset!" << std::endl;
+        return 1;
+    }
+    std::string line;
+    int pulse_idx = 0;
+    //std::getline(file, line); // skip header line
+    while (std::getline(st_file, line) && pulse_idx < PULSES) {
+        std::stringstream ss(line);
+        std::string value;
+
+        // Read each column from the line and store in respective array
+        std::getline(ss, value, ',');
+        x_ant_data_array[pulse_idx] = std::stof(value);
+
+        std::getline(ss, value, ',');
+        y_ant_data_array[pulse_idx] = std::stof(value);
+
+        std::getline(ss, value, ',');
+        z_ant_data_array[pulse_idx] = std::stof(value);
+
+        std::getline(ss, value, ',');
+        ref_range_data_array[pulse_idx] = std::stof(value);
+
+        pulse_idx++;
     }
     
-    // Add 1 to accommodate for overlap (helps with interpolation at boundaries)
-    TT_DATA* rc_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
-    for(int i = 0; i < TP_POINT_SIZE; i++) {
-        rc_array[i] = (TT_DATA) {i, i};
+    //for(int i=0; i<2; i++) {
+    //    printf("x_ant_data_array[%d] = %f\n", i, x_ant_data_array[i]);
+    //    printf("y_ant_data_array[%d] = %f\n", i, y_ant_data_array[i]);
+    //    printf("z_ant_data_array[%d] = %f\n", i, z_ant_data_array[i]);
+    //    printf("ref_range_data_array[%d] = %f\n", i, ref_range_data_array[i]);
+    //}
+
+    cfloat* rc_array = (cfloat*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(cfloat));
+     
+    // Current working dir inside build/hw/aiesim/
+    std::string rc_filename = "../../../design/test_data/gotcha_" + 
+                              std::to_string(RC_SAMPLES) + 
+                              "-out-of-424-rc-samples_pass1_360deg_HH.csv";
+    std::ifstream rc_file(rc_filename);
+    if (!rc_file.is_open()) {
+        std::cerr << "Error opening rc_file dataset!" << std::endl;
+        return 1;
+    }
+    pulse_idx = 0;
+    //std::getline(file, line); // skip header line
+    while (std::getline(rc_file, line) && pulse_idx < PULSES) {
+        std::stringstream ss(line);
+        std::string value;
+        int rc_samp_cnt = 0;
+
+        // Read each column (complex number) from the line and store in array
+        while (std::getline(ss, value, ',') && rc_samp_cnt < RC_SAMPLES) {
+            std::regex complex_regex(R"(([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)([+-](?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)i)");
+            std::smatch match;
+            std::regex_search(value, match, complex_regex);
+
+            float real_part = std::stof(match[1].str());
+            float imag_part = std::stof(match[2].str());
+
+            // Store the complex number in the array
+            rc_array[pulse_idx*RC_SAMPLES + rc_samp_cnt] = (cfloat) {real_part, imag_part};
+
+            rc_samp_cnt++;
+        }
+        rc_samp_cnt = 0;
+        pulse_idx++;
     }
 
-    //TT_DATA* xy_px_array = (TT_DATA*) GMIO::malloc(TP_POINT_SIZE*sizeof(TT_DATA));
-    const float C = 299792458.0;
-    float range_freq_step = 1471301.6;
-    //float range_freq_step = 5000000.0;
-    int half_range_samples = TP_POINT_SIZE/2;
-    float min_freq = 9288080400.0;
-
-    float range_width = C/(2.0*range_freq_step);
-    float range_res = range_width/TP_POINT_SIZE;
-
-    //for(int i = 0; i < TP_POINT_SIZE; i++) {
-    //    xy_px_array[i] = (TT_DATA) {(i-half_range_samples)*range_res, 0};
+    // Add 1 to accommodate for overlap (helps with interpolation at boundaries)
+    //for(int i = 0; i < PULSES*RC_SAMPLES; i++) {
+    //    rc_array[i] = (cfloat) {i, i};
     //}
     
-    int img_elem_size = AZ_POINT_SIZE*TP_POINT_SIZE;
-    int img_byte_size = img_elem_size*sizeof(TT_DATA);
-    TT_DATA* img_array = (TT_DATA*) GMIO::malloc(img_byte_size);
+    // AZIMUTH RESOLUTION GRID
+    double az_res = 0;
+    double half_az_width = 0;
+    if (PULSES != 1) {
+        double az_ant[PULSES];
+        for (int i = 0; i < PULSES; i++) {
+            az_ant[i] = std::atan2(y_ant_data_array[i], x_ant_data_array[i]);
+        }
+        unwrap(az_ant);
+        double sum_diff = 0.0;
+        for (int i = 1; i < PULSES; i++) {
+            sum_diff += (az_ant[i] - az_ant[i - 1]);
+        }
+        double mean_diff = sum_diff / (PULSES - 1);
+        double delta_az = std::fabs(mean_diff);
+        double min_az = *std::min_element(az_ant, az_ant + PULSES);
+        double max_az = *std::max_element(az_ant, az_ant + PULSES);
+        double total_az = max_az - min_az;
+        az_res = C/(2.0*total_az*MIN_FREQ);
+        double az_width = C/(2.0*delta_az*MIN_FREQ);
+        half_az_width = az_width/2.0;
+    }
+
+    // TARGET PIXELS
+    cfloat* xy_px_array = (cfloat*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(cfloat));
+    float* z_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float));
+    for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+        for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+            int idx = pulse_idx*RC_SAMPLES + rng_idx;
+            xy_px_array[idx] = (cfloat) {(rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES, az_res*pulse_idx - half_az_width};
+            z_px_array[idx] = 0.0;
+
+            printf("pixels[%d] = {%f, %f}\n", idx, xy_px_array[idx].real, xy_px_array[idx].imag);
+        }
+    }
+    
+    //int img_elem_size = PULSES*RC_SAMPLES;
+    int img_byte_size = PULSES*RC_SAMPLES*sizeof(cfloat);
+    cfloat* img_array = (cfloat*) GMIO::malloc(img_byte_size);
+    //for(int i = 0; i < RC_SAMPLES; i++) {
+    //    img_array[i] = (cfloat) {0, 0};
+    //}
 
     //for(int r = 0; r < MAT_ROWS; r++) {
     //    for(int c = 0; c < MAT_COLS; c++) {
     //        int index = (r*MAT_COLS)+c;
     //        float rand_float = static_cast<float>(std::rand()) / RAND_MAX;
-    //        gold_data_array[index] = (TT_DATA) {rand_float, 0};
+    //        gold_data_array[index] = (cfloat) {rand_float, 0};
     //    }
     //}
     
@@ -223,68 +342,156 @@ int main(int argc, char ** argv) {
         bpGraph[inst].run();
     }
 
-    int fft_per_ssr_entry_size = MAT_COLS / FFT_NPORTS;
-    int fft_per_ssr_byte_size = fft_per_ssr_entry_size * sizeof(TT_DATA);
+    //int fft_per_ssr_entry_size = MAT_COLS / FFT_NPORTS;
+    //int fft_per_ssr_byte_size = fft_per_ssr_entry_size * sizeof(cfloat);
 
     //TODO: DEBUG
     //print_arr(gold_data_array, 2, 5);
 
     // RTP Params
-    int32 rtp_img_elem_cnt_result[4] = {};
+    //int32 rtp_img_elem_cnt_result[4] = {};
    
     // Loop through pipeline ITER times
     int inst = 0;
-
-    const int PULSES = 1;
+    
     for(int iter=0; iter<ITER; iter++) {
         printf("\nPERFORM BACKPROJECTION (ITER = %d) (INST = %d)\n", iter, inst);
 
-        // Set up AIE graph to specific number of times
-        //bpGraph[inst].run(4);
+        int px_per_ai = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
+        int rc_per_ai = RC_SAMPLES/IMG_SOLVERS;
+        printf("px_per_ai = %d\n", px_per_ai);
         
+        // Pass in slowtime data into AI kernels
+        bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, PULSES*sizeof(float));
+        bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, PULSES*sizeof(float));
+        bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, PULSES*sizeof(float));
+        bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, PULSES*sizeof(float));
 
-        int per_bp_elem_size = TP_POINT_SIZE/IMG_SOLVERS;
-
-        // Pass in data to AIE
-        
-        for(int pulse=0; pulse<PULSES; pulse++) {
-            printf("pulse = %d\n", pulse);
-            bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, sizeof(float));
-            bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, sizeof(float));
-            bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, sizeof(float));
-            bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, sizeof(float));
+        // Pass in other data into bp AI kernels
+        for(int pulse_idx=0; pulse_idx<PULSES; pulse_idx++) {
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
-                bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
+                // Dump image if on last pulse, otherwise keep focusing the image
+                if (pulse_idx == PULSES-1) {
+                    bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], true);
+                } else {
+                    bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], false);
+                }
+                
+                // IS IT POSSIBLE TO DO MULTIPLE ITERATIONS OF KERNEL WITHOUT IT COUNTING AS A PULESE, BUT JUST TO FORCE MORE 
+                // PIXELS INTO KERNEL FOR CUMULATION? I FEEL THIS FEATURE WOULD BE GOOD FOR EXSTENSABILITY
+                bpGraph[inst].gmio_in_xy_px[kern_id].gm2aie_nb(xy_px_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
+                bpGraph[inst].gmio_in_z_px[kern_id].gm2aie_nb(z_px_array + kern_id*px_per_ai, px_per_ai*sizeof(float));
+                //float low_x_px_idx_bound = (range_width_seg*3)-(kern_id*range_width_seg);
+                //float high_x_px_idx_bound = (range_width_seg*4)-(kern_id*range_width_seg);
 
-                //bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*per_bp_elem_size, per_bp_elem_size*sizeof(TT_DATA));
+                //float start_range_px = -range_width/2 + range_width_seg*kern_id;
+                //float end_range_px = -range_width/2 + range_width_seg*(kern_id+1);
+                //float start_az_px = az_width/2.0;
+                //float end_az_px = -az_width/2.0;
+
+                //float start_range_px = -range_width/2;
+                //float end_range_px = range_width/2;
+
+                //printf("start_range_px=%f | end_range_px=%f | start_az_px=%f | end_az_px=%f | range_res=%f\n", 
+                //        start_range_px, end_range_px, start_az_px, end_az_px, range_res);
+
+
+                //2 PULSES SEEMED VERY CLOSE TO MATLAB. 3 PULSES DID NOT WORK;IT GAVE A WEIRD PIC IN MATLAB. 4 SEEMED OKAY BUT SLIGHTLY DIFFRENT THAN MATLAB. TRYING 10 TO SEE IF THAT WORKS, OR IF IT NEEDS TO BE A FACTOR OF THE POWER OF 2
+
+                // Derive RC offsets for AI kernel per pulse. 
+                // The motivation behind the following derivation is to try and pass "usable" range 
+                // compressed values into each img_reconstruct_kern AI kernel. Because we calculate the 
+                // boundaries of what the AI kernels will use here (on host/ARM), that gives us insight
+                // into which range compressed values will actually be utilized for a specific AI kernel 
+                // given their target pixels they are deriving for. This reduces the necessary size of the
+                // rc_in ping-pong buffer into the kernel (which is necessary because we are already pushing
+                // the stack limit). Note: This same calculation occurs on the AI kernel for each target pixel.
+                //float upper_x_per_ai = xy_px_array[kern_id*px_per_ai + (px_per_ai-1)].real;
+                //float upper_y_per_ai = xy_px_array[kern_id*px_per_ai + (px_per_ai-1)].imag;
+                //float upper_z_per_ai = z_px_array[0]; // All Z pixels currently 0, so upper bound is any Z pixel
+                //float dR_bounds = sqrt(pow(x_ant_data_array[pulse_idx] - upper_x_per_ai, 2) 
+                //                     + pow(y_ant_data_array[pulse_idx] - upper_y_per_ai, 2) 
+                //                     + pow(z_ant_data_array[pulse_idx] - upper_z_per_ai, 2))
+                //                     - ref_range_data_array[pulse_idx];
+
+                //float px_idx_bound = dR_bounds/range_res + half_range_samples;
+                //int rounded_px_idx_bound = (int) std::floor(px_idx_bound);
+
+                //// The offset for gm2aie needs to be 128 bit aligned. Because cfloats are 8B (64b),
+                //// then the rc_idx_offset just needs to be even
+                //int rc_idx_offset = rounded_px_idx_bound - rounded_px_idx_bound%2;
+                //printf("%d: idx: %d | upper_x: %f | upper_y: %f | upper_z: %f | rounded_px_idx_bound: %d | rc_idx_offset: %d\n", 
+                //        kern_id, kern_id*px_per_ai + (px_per_ai-1), upper_x_per_ai, upper_y_per_ai, upper_z_per_ai, rounded_px_idx_bound, rc_idx_offset);
+
+                ////printf("dR_bounds: %f | px_idx_bound: %f | rounded_px_idx_bound: %d | rc_idx_offset: %d\n", dR_bounds, px_idx_bound, rounded_px_idx_bound, rc_idx_offset);
+
+                //bpGraph[inst].update(bpGraph[inst].rtp_rc_idx_offset_in[kern_id], rc_idx_offset);
+                bpGraph[inst].update(bpGraph[inst].rtp_rc_idx_offset_in[kern_id], 0);
+
+
+                // Need to be wiser and stratigically pass in data based on what the input target pixels are for that AI tile
+                //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array, RC_SAMPLES*sizeof(cfloat));
+                //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*px_per_ai, px_per_ai*sizeof(cfloat));
+                bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
+                
+                bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
             }
-
-            bpGraph[inst].gmio_out_img.aie2gm_nb(img_array, img_byte_size);
-
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
-                // RTP header idx
-                bpGraph[inst].read(bpGraph[inst].rtp_img_elem_cnt_out[kern_id], rtp_img_elem_cnt_result[kern_id]);
-                printf("rtp_img_elem_cnt_result[%d] = %d\n", kern_id, rtp_img_elem_cnt_result[kern_id]);
+                bpGraph[inst].gmio_out_img[kern_id].wait();
+                printf("after wait sig\n");
             }
-
-            bpGraph[inst].gmio_out_img.wait();
-            printf("after wait sig\n");
-            //for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
-            //    bpGraph[inst].gmio_out_img[kern_id].wait();
-            //    printf("after wait sig\n");
-            //}
-
-
-            //int pkt_header_id = *(unsigned int*)&img_array[0].real & 0x1F;
-            //printf("array[%d] = %d\n", 0,  pkt_header_id);
-
         }
+
+        //bpGraph[inst].gmio_out_img.aie2gm_nb(img_array, img_byte_size);
+
+        //for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
+        //    // RTP header idx
+        //    bpGraph[inst].read(bpGraph[inst].rtp_img_elem_cnt_out[kern_id], rtp_img_elem_cnt_result[kern_id]);
+        //    printf("rtp_img_elem_cnt_result[%d] = %d\n", kern_id, rtp_img_elem_cnt_result[kern_id]);
+        //}
+
+        //bpGraph[inst].gmio_out_img.wait();
+        //printf("after wait sig\n");
+        //for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
+        //    bpGraph[inst].gmio_out_img[kern_id].wait();
+        //    printf("after wait sig\n");
+        //}
+
+        //printf("START TIMER...\n");
+        //sleep(120);
+        //std::this_thread::sleep_for(std::chrono::seconds(15));
+        //printf("DONE TIMER\n");
+
+
+        //int pkt_header_id = *(unsigned int*)&img_array[0].real & 0x1F;
+        //printf("array[%d] = %d\n", 0,  pkt_header_id);
+
         //TODO: DEBUG
         //printf("array[%d] = 0x%08x\n", 0,  *(unsigned int*)&img_array[0].real);
         //printf("array[%d] = 0x%08x\n", 10, *(unsigned int*)&img_array[10].imag);
-        //printf("array[%d] = 0x%08x\n", 34, *(unsigned int*)&img_array[34].real);
+        //printf("array[%d] = 0x%08x\n", 30, *(unsigned int*)&img_array[30].real);
+        //printf("array[%d] = 0x%08x\n", 31, *(unsigned int*)&img_array[31].real);
+        //printf("array[%d] = 0x%08x\n", 32, *(unsigned int*)&img_array[32].real);
         //printf("array[%d] = 0x%08x\n", 56, *(unsigned int*)&img_array[56].imag);
-        for(int i=0; i<img_elem_size; i++) {
+
+
+        // Open a file for writing
+        // Current working dir inside build/hw/aiesim/
+        FILE *img_fp = fopen("../../../design/aie/img.csv", "w");
+        if (img_fp == NULL) {
+            perror("Error opening img.csv file");
+            return EXIT_FAILURE;
+        }
+
+        fprintf(img_fp, "%.12f%+.12fi", img_array[0].real, img_array[0].imag);
+        for(int i=1; i<PULSES*RC_SAMPLES; i++) {
+            if (i%RC_SAMPLES == 0) {
+                fprintf(img_fp, "\n");
+            }
+            fprintf(img_fp, ",%.12f%+.12fi", img_array[i].real, img_array[i].imag);
+        }
+
+        for(int i=0; i<PULSES*RC_SAMPLES; i++) {
             printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
         }
 
@@ -301,12 +508,12 @@ int main(int argc, char ** argv) {
         //}
 
         //for(int i=0; i<DIFFER_RANGE_SOLVERS; i++) {
-        //    bpGraph[0].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(TT_DATA));
+        //    bpGraph[0].gmio_in_xy_px[i].gm2aie_nb(xy_px_array + i*2048, 2048*sizeof(cfloat));
         //}
 
         //for(int i=0; i<IMG_SOLVERS; i++) {
-        //    bpGraph[0].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(TT_DATA));
-        //    bpGraph[0].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(TT_DATA));
+        //    bpGraph[0].gmio_in_rc[i].gm2aie_nb(rc_array + i*2048, 2048*sizeof(cfloat));
+        //    bpGraph[0].gmio_out_img[i].aie2gm_nb(img_array + i*2048, 2048*sizeof(cfloat));
         //}
 
         //for(int inst=0; inst<INSTANCES; inst++) {
@@ -374,7 +581,7 @@ int main(int argc, char ** argv) {
         //for(int r = 0; r < MAT_ROWS; r++) {
         //    for(int c = 0; c < MAT_COLS; c++) {
         //        int index = (r*MAT_COLS)+c;
-        //        one_array[index] = (TT_DATA) {1, 0};
+        //        one_array[index] = (cfloat) {1, 0};
         //    }
         //}
         //for(int inst=0; inst<INSTANCES; inst++) {
@@ -430,9 +637,9 @@ int main(int argc, char ** argv) {
 }
 
 //const int BLOCK_SIZE_ENTRIES = MAT_ROWS * MAT_COLS;
-//const int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(TT_DATA);
+//const int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(cfloat);
 //
-//int fftRowErrorCheck(TT_DATA* fft_row_array, int instance = -1) {
+//int fftRowErrorCheck(cfloat* fft_row_array, int instance = -1) {
 //    int error_cnt = 0;
 //
 //    for(int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
@@ -452,7 +659,7 @@ int main(int argc, char ** argv) {
 //    return error_cnt;
 //}
 //
-//int fftColErrorCheck(TT_DATA* fft_col_array, int instance = -1) {
+//int fftColErrorCheck(cfloat* fft_col_array, int instance = -1) {
 //    int error_cnt = 0;
 //
 //    for(int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
@@ -467,7 +674,7 @@ int main(int argc, char ** argv) {
 //    return error_cnt;
 //}
 //
-//int cplxConjErrorCheck(TT_DATA* cplx_conj_array, int instance = -1) {
+//int cplxConjErrorCheck(cfloat* cplx_conj_array, int instance = -1) {
 //    int error_cnt = 0;
 //
 //    for(int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
@@ -482,7 +689,7 @@ int main(int argc, char ** argv) {
 //    return error_cnt;
 //}
 //
-//int hpErrorCheck(TT_DATA* hp_array, int instance = -1) {
+//int hpErrorCheck(cfloat* hp_array, int instance = -1) {
 //    int error_cnt = 0;
 //
 //    for(int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
@@ -497,7 +704,7 @@ int main(int argc, char ** argv) {
 //    return error_cnt;
 //}
 //
-//int ifftColErrorCheck(TT_DATA* ifft_col_array, int instance = -1) {
+//int ifftColErrorCheck(cfloat* ifft_col_array, int instance = -1) {
 //    int error_cnt = 0;
 //
 //    for(int i = 0; i < BLOCK_SIZE_ENTRIES; i++) {
@@ -518,7 +725,7 @@ int main(int argc, char ** argv) {
 //    return error_cnt;
 //}
 //
-//int ifftRowErrorCheck(TT_DATA* ifft_row_array, int instance = -1) {
+//int ifftRowErrorCheck(cfloat* ifft_row_array, int instance = -1) {
 //    int error_cnt = 0;
 //
 //    if(ifft_row_array[0].real != HP_SAMPLE_DATA*BLOCK_SIZE_ENTRIES || ifft_row_array[0].imag != 0)
@@ -536,7 +743,7 @@ int main(int argc, char ** argv) {
 //    return error_cnt;
 //}
 //
-//int peakSearchErrorCheck(TT_DATA* peak_array, int instance = -1) {
+//int peakSearchErrorCheck(cfloat* peak_array, int instance = -1) {
 //    int error_cnt = 0;
 //
 //    int max_val = peak_array[0].real;
@@ -577,20 +784,20 @@ int main(int argc, char ** argv) {
 //    
 //    // Create a map_fft_array placeholder so we don't need to keep computing the 
 //    // map fft every time
-//    TT_DATA* map_fft_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
+//    cfloat* map_fft_array = (cfloat*) GMIO::malloc(BLOCK_SIZE_BYTES);
 //    
 //    // Create and populate the map image with input data that can be validated
 //    // throughout the pipelines
-//    TT_DATA* map_array = (TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES);
-//    map_array[0] = (TT_DATA) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
+//    cfloat* map_array = (cfloat*) GMIO::malloc(BLOCK_SIZE_BYTES);
+//    map_array[0] = (cfloat) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
 //    for(int j = 1; j < BLOCK_SIZE_ENTRIES; j++) {
-//        map_array[j] = (TT_DATA) {0, 0};
+//        map_array[j] = (cfloat) {0, 0};
 //    }
 //    
 //    // Malloc space for template images
-//    std::vector<TT_DATA*> tmpl_arrays;
+//    std::vector<cfloat*> tmpl_arrays;
 //    for(int inst=0; inst<INSTANCES; inst++) {
-//        tmpl_arrays.push_back((TT_DATA*) GMIO::malloc(BLOCK_SIZE_BYTES));
+//        tmpl_arrays.push_back((cfloat*) GMIO::malloc(BLOCK_SIZE_BYTES));
 //    }
 //    
 //    // Number of iteration for the AIE graphs to run
@@ -629,9 +836,9 @@ int main(int argc, char ** argv) {
 //        // Create and populate the template images with input data that can be validated
 //        // throughout the pipeline
 //        for(int inst=0; inst<INSTANCES; inst++) {
-//            tmpl_arrays[inst][0] = (TT_DATA) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
+//            tmpl_arrays[inst][0] = (cfloat) {FFT_SAMPLE_DATA, FFT_SAMPLE_DATA};
 //            for(int j = 1; j < BLOCK_SIZE_ENTRIES; j++) {
-//                tmpl_arrays[inst][j] = (TT_DATA) {0, 0};
+//                tmpl_arrays[inst][j] = (cfloat) {0, 0};
 //            }
 //        }
 //
@@ -727,7 +934,7 @@ int main(int argc, char ** argv) {
 //        // Perform peak search on all images at the same time
 //        for(int inst=0; inst<INSTANCES; inst++) {
 //            peakGraph[inst].gmio_in.gm2aie_nb(tmpl_arrays[inst], BLOCK_SIZE_BYTES);
-//            peakGraph[inst].gmio_out.aie2gm_nb(tmpl_arrays[inst], sizeof(TT_DATA));
+//            peakGraph[inst].gmio_out.aie2gm_nb(tmpl_arrays[inst], sizeof(cfloat));
 //        }
 //
 //        // Block until AIE finishes

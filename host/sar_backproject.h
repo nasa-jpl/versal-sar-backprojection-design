@@ -16,7 +16,10 @@ class SARBackproject {
     private:
         // Xclbin and hdf5 filename
         const char* m_xclbin_filename;
-        const char* m_hdf5_filename;
+        //const char* m_hdf5_filename;
+        const char* m_st_dataset_filename;
+        const char* m_rc_dataset_filename;
+        const char* m_img_out_filename;
 
         // Number of iterations for AIE kernels to run. The acutal number of
         // iterations of the AIE kernels will be some multiple of m_iter.
@@ -40,8 +43,8 @@ class SARBackproject {
         //std::vector<xrt::graph> m_hp_graph_hdls;
 
         // PRIVATE FUNCTIONS
-        bool readCplxDataset(hid_t file, const std::string& dataset_name, std::vector<TT_DATA>& data);
-        bool readFloatDataset(hid_t file, const std::string& dataset_name, std::vector<float>& data);
+        //bool readCplxDataset(hid_t file, const std::string& dataset_name, std::vector<cfloat>& data);
+        //bool readFloatDataset(hid_t file, const std::string& dataset_name, std::vector<float>& data);
         
 
     public:
@@ -54,20 +57,27 @@ class SARBackproject {
         float* m_z_ant_pos_array;
         xrt::aie::bo m_ref_range_buffer;
         float* m_ref_range_array;
-        //xrt::aie::bo m_xy_px_buffer;
-        //TT_DATA* m_xy_px_array;
+        xrt::aie::bo m_xy_px_buffer;
+        cfloat* m_xy_px_array;
+        xrt::aie::bo m_z_px_buffer;
+        float* m_z_px_array;
         xrt::aie::bo m_rc_buffer;
-        TT_DATA* m_rc_array;
+        cfloat* m_rc_array;
         xrt::aie::bo m_img_buffer;
-        TT_DATA* m_img_array;
+        cfloat* m_img_array;
         //xrt::aie::bo m_range_data_buffer;
-        //TT_DATA* m_range_data_array;
+        //cfloat* m_range_data_array;
         //xrt::aie::bo m_ref_func_buffer;
-        //TT_DATA* m_ref_func_array;
+        //cfloat* m_ref_func_array;
 
     public:
         // Constructor
-        SARBackproject(const char* xclbin_filename, const char* h5_filename, int iter, int instances);
+        SARBackproject(const char* xclbin_filename, 
+                       const char* st_dataset_filename, 
+                       const char* rc_dataset_filename, 
+                       const char* img_out_filename, 
+                       int iter, 
+                       int instances);
 
         // PUBLIC FUNCTIONS
         static void startTime();
@@ -76,23 +86,29 @@ class SARBackproject {
         static void printTimeDiff(const char *msg);
         static void printTotalTime(int curr_iter);
         static void printAvgTime(int iterations);
-        static void reshapeMatrix(TT_DATA* input, int rows, int cols, int segment, bool reverse=false);
-        static void strideCols(TT_DATA* input, int rows, int cols, int stride, bool reverse=false);
-        void runGraphs();
+        static void unwrap(double* angles);
+        //static void reshapeMatrix(cfloat* input, int rows, int cols, int segment, bool reverse=false);
+        //static void strideCols(cfloat* input, int rows, int cols, int stride, bool reverse=false);
+        bool writeImg();
         bool fetchRadarData();
+        void genTargetPixels();
+        void runGraphs();
         void bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
                 xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
-                xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_img_out, int num_of_buffers);
-        void fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
-        void ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
-        void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
-        void elemMatMult(xrt::aie::bo* buffersA_in, xrt::aie::bo* buffersB_in, 
-                         xrt::aie::bo* buffers_out, int num_of_buffers);
+                xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_xy_px_in, 
+                xrt::aie::bo* buffers_z_px_in, xrt::aie::bo* buffers_img_out, 
+                int num_of_buffers);
+        //void fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        //void ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        //void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
+        //void elemMatMult(xrt::aie::bo* buffersA_in, xrt::aie::bo* buffersB_in, 
+        //                 xrt::aie::bo* buffers_out, int num_of_buffers);
 
         // PUBLIC INSTANCE VARIABLES
         // Block size of images
-        static constexpr int BLOCK_SIZE_ENTRIES = MAT_ROWS * MAT_COLS;
-        static constexpr int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(TT_DATA);
+        //static constexpr int BLOCK_SIZE_ENTRIES = MAT_ROWS * MAT_COLS;
+        //static constexpr int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(cfloat);
+
 
         // PL dma_hls fft kernel handlers and buffers 
         //std::vector<xrt::kernel> m_dma_hls_fft_kernels;

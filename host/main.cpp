@@ -10,75 +10,84 @@
 
 using namespace adf;
 
-void print_arr(TT_DATA* arr, int num_rows, int num_cols, int divisor=1) {
-    for(int r=0; r<num_rows; r++) {
-        for(int c=0; c<num_cols; c++) {
-            int index = (r*MAT_COLS) + c;
-            printf("array[%d][%d] = {%f, %f}\n", r, c, arr[index].real/divisor, arr[index].imag/divisor);
-        }
-    }
-}
-
-int ifftErrorCheck(TT_DATA* data_array) {
-    int error_cnt = 0;
-    float real, imag;
-
-    for(int r = 0; r < MAT_ROWS; r++) {
-        for(int c = 0; c < MAT_COLS; c++) {
-            int index = (r*MAT_COLS)+c;
-            real = data_array[index].real/TP_POINT_SIZE;
-            imag = data_array[index].imag/TP_POINT_SIZE;
-            //printf("IFFT[%d, %d] = {%f, %f}\n", r, c, real, imag);
-
-            if (c == 0) {
-                if(std::abs(real-1.5) > 0.00001 || std::abs(imag+1.5) > 0.00001) {
-                    printf("ERROR IFFT[%d, %d] = {%lf, %lf} | EXPECTED {%f, %f}\n", r, c, real, imag, 1.5, 1.5);
-                    error_cnt++;
-                }
-            }
-            else {
-                if(std::abs(real) > 0.00001 || std::abs(imag) > 0.00001) {
-                    printf("ERROR IFFT[%d, %d] = {%lf, %lf} | EXPECTED {%d, %d}\n", r, c, real, imag, 0, 0);
-                    error_cnt++;
-                }
-
-            }
-        }
-    }
-
-    printf("IFFT ERRORS: %d\n\n", error_cnt);
-
-    return error_cnt;
-}
+//void print_arr(TT_DATA* arr, int num_rows, int num_cols, int divisor=1) {
+//    for(int r=0; r<num_rows; r++) {
+//        for(int c=0; c<num_cols; c++) {
+//            int index = (r*MAT_COLS) + c;
+//            printf("array[%d][%d] = {%f, %f}\n", r, c, arr[index].real/divisor, arr[index].imag/divisor);
+//        }
+//    }
+//}
+//
+//int ifftErrorCheck(TT_DATA* data_array) {
+//    int error_cnt = 0;
+//    float real, imag;
+//
+//    for(int r = 0; r < MAT_ROWS; r++) {
+//        for(int c = 0; c < MAT_COLS; c++) {
+//            int index = (r*MAT_COLS)+c;
+//            real = data_array[index].real/TP_POINT_SIZE;
+//            imag = data_array[index].imag/TP_POINT_SIZE;
+//            //printf("IFFT[%d, %d] = {%f, %f}\n", r, c, real, imag);
+//
+//            if (c == 0) {
+//                if(std::abs(real-1.5) > 0.00001 || std::abs(imag+1.5) > 0.00001) {
+//                    printf("ERROR IFFT[%d, %d] = {%lf, %lf} | EXPECTED {%f, %f}\n", r, c, real, imag, 1.5, 1.5);
+//                    error_cnt++;
+//                }
+//            }
+//            else {
+//                if(std::abs(real) > 0.00001 || std::abs(imag) > 0.00001) {
+//                    printf("ERROR IFFT[%d, %d] = {%lf, %lf} | EXPECTED {%d, %d}\n", r, c, real, imag, 0, 0);
+//                    error_cnt++;
+//                }
+//
+//            }
+//        }
+//    }
+//
+//    printf("IFFT ERRORS: %d\n\n", error_cnt);
+//
+//    return error_cnt;
+//}
 
 int main(int argc, char ** argv) {
     if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " <xclbin file> <hdf5 file> <iteration>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <xclbin file> <slowtime dataset csv file> <range compressed dataset csv file> <img out csv file> <iteration>" << std::endl;
         return -1;
     }
     std::cout << "\n##### STARTING APPLICATION #####" << std::endl;
 
     // User args
     char* xclbin_filename = argv[1];
-    char* hdf5_filename = argv[2];
-    int iter = std::stoi(argv[3]);
+    char* st_dataset_filename = argv[2];
+    char* rc_dataset_filename = argv[3];
+    char* img_out_filename = argv[4];
+    int iter = std::stoi(argv[5]);
 
     // Instances of the design instantiated across the PL and AIE
     const int INSTANCES = 1;
 
     std::cout << "\nLoading xclbin, instantiate AIE graph handles, and malloc memory (HOST)..." << std::endl;
     SARBackproject::startTime();
-    SARBackproject ifcc(xclbin_filename, hdf5_filename, iter, INSTANCES);
+    SARBackproject ifcc(xclbin_filename, st_dataset_filename, rc_dataset_filename, img_out_filename, iter, INSTANCES);
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Init completed (HOST)");
 
     std::cout << "\nPopulating data buffers (HOST)..." << std::endl;
     SARBackproject::startTime();
-    if(!ifcc.fetchRadarData()) {
+    if(ifcc.fetchRadarData() != 0) {
+        std::cout << "\nPopulating data buffers failed (HOST)" << std::endl;
         return -1;
     }
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Populating data buffers completed (HOST)");
+
+    std::cout << "\nGenerating target pixels (HOST)..." << std::endl;
+    SARBackproject::startTime();
+    ifcc.genTargetPixels();
+    SARBackproject::endTime();
+    SARBackproject::printTimeDiff("Generating target pixels  completed (HOST)");
 
     // Start all AIE kernels
     std::cout << "\nRun AIE graphs (HOST)... " << std::endl;
@@ -92,8 +101,9 @@ int main(int argc, char ** argv) {
     xrt::aie::bo buffers_y_ant_pos_in[INSTANCES];
     xrt::aie::bo buffers_z_ant_pos_in[INSTANCES];
     xrt::aie::bo buffers_ref_range_in[INSTANCES];
-    xrt::aie::bo buffers_xy_px_in[INSTANCES];
     xrt::aie::bo buffers_rc_in[INSTANCES];
+    xrt::aie::bo buffers_xy_px_in[INSTANCES];
+    xrt::aie::bo buffers_z_px_in[INSTANCES];
     xrt::aie::bo buffers_img_out[INSTANCES];
 
     // Initialize generic xrt::aie::bo buffer arrays 
@@ -113,18 +123,28 @@ int main(int argc, char ** argv) {
     buffers_z_ant_pos_in[0] = ifcc.m_z_ant_pos_buffer;
     buffers_ref_range_in[0] = ifcc.m_ref_range_buffer;
     buffers_rc_in[0] = ifcc.m_rc_buffer;
+    buffers_xy_px_in[0] = ifcc.m_xy_px_buffer;
+    buffers_z_px_in[0] = ifcc.m_z_px_buffer;
     buffers_img_out[0] = ifcc.m_img_buffer;
     SARBackproject::startTime();
-    ifcc.bp(buffers_x_ant_pos_in, buffers_y_ant_pos_in, buffers_z_ant_pos_in, 
-            buffers_ref_range_in, buffers_rc_in, buffers_img_out, buff_num);
+    ifcc.bp(buffers_x_ant_pos_in, buffers_y_ant_pos_in, buffers_z_ant_pos_in, buffers_ref_range_in, 
+            buffers_rc_in, buffers_xy_px_in, buffers_z_px_in, buffers_img_out, buff_num);
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Backprojection completed (AIE)");
     
-    for(int i=0; i<4; i++) {
-        for(int j=i*2048; j<(i*2048)+8; j++) {
-            printf("%d: %f\t%f\n", j, ifcc.m_img_array[j].real, ifcc.m_img_array[j].imag);
-        }
+    if(ifcc.writeImg() != 0) {
+        std::cout << "\nWriting image failed!" << std::endl;
+        return -1;
     }
+
+    //for(int i=0; i<64; i++) {
+    //    printf("%d: %f\t%f\n", i, ifcc.m_img_array[i].real, ifcc.m_img_array[i].imag);
+    //}
+    //for(int i=0; i<4; i++) {
+    //    for(int j=i*2048; j<(i*2048)+8; j++) {
+    //        printf("%d: %f\t%f\n", j, ifcc.m_img_array[j].real, ifcc.m_img_array[j].imag);
+    //    }
+    //}
 
     //std::cout << "\nReshape reference function for FFT (HOST - OpenMP)..." << std::endl;
     //SARBackproject::startTime();
