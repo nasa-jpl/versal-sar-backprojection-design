@@ -44,16 +44,3 @@ Scalar Engines (CPUs), Adaptable Engines (FPGA/programmable logic), and
 Intelligent Engines (AI and DSP cores), which allow developers to
 accelerate compute-heavy tasks \cite{AMD_Versal_WP505}. 
 
-This current implementation is designed to evaluate the performance
-potential of the AI Engine (AIE) in SAR backprojection. It primarily
-relies on AIE processing, with the ARM Cortex-A72 processor managing
-execution flow and kernel configurations for the AIE. This approach
-isolates and analyzes the AIE's contribution without involving other 
-processing resources like the FPGA or DSP engines. Future work may explore
-utilizing these additional resources. Currently, the implementation is
-in its infancy and focuses on capturing performance metrics for a
-single pulse at various azimuth image lines. While multi-pulse
-processing is possible within the current framework, full validation of
-the results across multiple pulses is challenging due to the large
-volume of data generated.
-

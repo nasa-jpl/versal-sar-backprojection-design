@@ -1,0 +1,27 @@
+% =============================================================================
+\section{Versal Overview}
+% =============================================================================
+\label{sec:overview}
+
+AI Engines (AIEs) are an array of very-long instruction word (VLIW) processors 
+with single instruction multiple data (SIMD) vector units that are highly
+optimized for compute-intensive applications \cite{AMD_Versal_UG1079}. The AIE
+array supportes three levels of parallelism:
+
+\begin{itemize}
+    \item \textbf{Instruction Level Parallelism (ILP):} Through the VLIW 
+        architecture allowing multiple operations to be executed in a single 
+        clock cycle.
+    \item \textbf{SIMD:} Through vector registers allowing multiple elements
+        (for example, eight) to be computed in parallel.
+    \item \textbf{Multicore:} Through the AIE array, allowing up to 400 AIE
+        tiles to execute in parallel.
+\end{itemize}
+
+While most standard C code can be compiled for the AI Engine, the code might
+need restructuring to take full advantage of the parallelism provided by the
+hardware. The power of an AI Engine is in its ability to execute a 
+multiply-accumulate (MAC) operation using two vectors, load two vectors for
+the next operation, store a vector from the previous operation, and increment
+a pointer or execute another scalar operation in each clock cycle.
+

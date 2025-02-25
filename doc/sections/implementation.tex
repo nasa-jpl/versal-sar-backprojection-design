@@ -3,6 +3,10 @@
 % =============================================================================
 \label{sec:impl}
 
+% =============================================================================
+\subsection{Overview}
+% =============================================================================
+
 % -----------------------------------------------------------------------------
 % AIE Graph
 % -----------------------------------------------------------------------------
@@ -16,7 +20,62 @@
 \end{figure}
 % -----------------------------------------------------------------------------
 
-This section provides an overview of the backprojection implementation on the
-Versal ACAP.
+The SAR Backprojection implementation employs the spotlight imaging mode
+and leverages all three levels of parallelism offered by the Versal ACAP: 
+SIMD, multicore, and ILP. Due to time constraints, the current design 
+focuses primarily on SIMD and multicore parallelism; future work will
+explore incorporating more ILP for further performance optimization.
+
+Several custom AIE kernel designs with various graph constructs were iterated
+upon. The design merged to implementing the following two custom AIE kernels:
+Slowtime Splicer and Image Reconstruction kernels. The design supports scaling
+the number of Image Reconstruction kernels between 4 and 8, resulting in a
+total AIE kernel count of 5 or 9 respectively. These kernels play a crucial
+role in accelerating the computationally demanding steps of the Backprojection
+algorithm. Additionally, the graph model heavily relies on broadcasting, which
+is a AIE graph construct that allows broadcasting the same data to multiple AIE
+tiles at the same time.
+
+\begin{itemize}
+    \item \textbf{Slowtime Splicer Kernel:} A dedicated AIE kernel responsible 
+        for splicing together slowtime data, comprising antenna x, y, and z 
+        coordinates, as well as range to scene center. This data is received 
+        from the ARM processor and then broadcasted to multiple image
+        reconstruction kernels.
+    \item \textbf{Image Reconstruction Kernels:} These kernels are also 
+        implemented on AIEs and handle the core backprojection processing. They
+        calculate the differential range for each pixel in the image (m),
+        measuring its relative distance compared to the central pixel. They 
+        perform cumulative summing and phase correction, leveraging the 
+        parallel processing capabilities of the AIEs for efficient execution.
+\end{itemize}
+
+% =============================================================================
+\subsection{Data Set}
+% =============================================================================
+
+The data set used is the "Gotcha Volumetric SAR Data Set, Version 
+1.0"~\cite{GOTCHA}. This data set consists of SAR phase history
+data collected at X-band with a 640 MHz bandwidth with full azimuth coverage
+at 8 different elevation angles with full polarization. The imaging scene
+consists of numerous civilian vehicles and calibration targets. The data is
+stored in MATLAB binary format (*.mat files). Each file contains the phase
+history collected over one degree of azimuth for a single pass and a single
+polarization. Loading a file gives a single MATLAB structure with fields
+containing the k-space data, frequencies, x,y,z coordinate antenna locations,
+range to scene center, azimuth angle (degrees), and elevation angle (degrees).
+
+
+% =============================================================================
+\subsection{Computational Elements}
+% =============================================================================
+
+The design relies on AIE processing, with the ARM Cortex-A72 processor managing
+AIE input, execution flow and kernel configurations for the AIE. This approach
+isolates and analyzes the AIE's contribution without involving other processing
+resources like the FPGA or DSP engines. Future work may involve utilizing these 
+additional resources. 
+
+
 
 
