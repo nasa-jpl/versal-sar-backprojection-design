@@ -331,11 +331,12 @@ class BackProjectionGraph: public graph
         input_gmio gmio_in_y_ant_pos;
         input_gmio gmio_in_z_ant_pos;
         input_gmio gmio_in_ref_range;
+        input_gmio gmio_in_rc;
 
         // Image reconstruction GMIO ports
         input_gmio gmio_in_xy_px[IMG_SOLVERS];
         input_gmio gmio_in_z_px[IMG_SOLVERS];
-        input_gmio gmio_in_rc[IMG_SOLVERS];
+        //input_gmio gmio_in_rc[IMG_SOLVERS];
         output_gmio gmio_out_img[IMG_SOLVERS];
         //output_gmio gmio_out_img;
             
@@ -384,12 +385,13 @@ class BackProjectionGraph: public graph
             gmio_in_y_ant_pos = input_gmio::create("gmio_in_y_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
             gmio_in_z_ant_pos = input_gmio::create("gmio_in_z_ant_pos_" + std::to_string(bp_graph_insts), 256, 1000);
             gmio_in_ref_range = input_gmio::create("gmio_in_ref_range_" + std::to_string(bp_graph_insts), 256, 1000);
+            gmio_in_rc = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts), 256, 1000);
 
             // Image Reconstruct GMIO ports
             for (int i=0; i<IMG_SOLVERS; i++) {
                 gmio_in_xy_px[i] = input_gmio::create("gmio_in_xy_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 gmio_in_z_px[i] = input_gmio::create("gmio_in_z_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
-                gmio_in_rc[i] = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+                //gmio_in_rc[i] = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
                 gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
             }
             //gmio_out_img = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts), 256, 1000);
@@ -402,6 +404,7 @@ class BackProjectionGraph: public graph
             connect(gmio_in_y_ant_pos.out[0], sts_km.in[1]);
             connect(gmio_in_z_ant_pos.out[0], sts_km.in[2]);
             connect(gmio_in_ref_range.out[0], sts_km.in[3]);
+            connect(gmio_in_rc.out[0], sts_km.in[4]);
 
 
             // GMIO range compressed data to image reconstruction kernel
@@ -412,7 +415,7 @@ class BackProjectionGraph: public graph
             for (int i=0; i<IMG_SOLVERS; i++) {
                 connect(gmio_in_xy_px[i].out[0], img_rec_km[i].in[1]);
                 connect(gmio_in_z_px[i].out[0], img_rec_km[i].in[2]);
-                connect(gmio_in_rc[i].out[0], img_rec_km[i].in[3]);
+                //connect(gmio_in_rc[i].out[0], img_rec_km[i].in[3]);
                 connect(img_rec_km[i].out[0], gmio_out_img[i].in[0]);
             }
 
@@ -442,6 +445,7 @@ class BackProjectionGraph: public graph
             //connect(sts_km.out[0], img_rec_km_c.in[0]);
             for (int i=0; i<IMG_SOLVERS; i++) {
                 connect(sts_km.out[0], img_rec_km[i].in[0]);
+                connect(sts_km.out[1], img_rec_km[i].in[3]);
             }
 
             // Dummy to image reconstruction

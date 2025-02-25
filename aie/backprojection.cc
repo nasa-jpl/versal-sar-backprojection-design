@@ -12,15 +12,21 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
                            input_buffer<float, extents<1>>& __restrict y_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict z_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict ref_range_in,
-                           output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out) {
+                           input_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                           output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out,
+                           output_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_out) {
     // Antenna X, Y, and Z position and reference range to scene center
     auto x_ant_pos_in_iter = aie::begin(x_ant_pos_in);
     auto y_ant_pos_in_iter = aie::begin(y_ant_pos_in);
     auto z_ant_pos_in_iter = aie::begin(z_ant_pos_in);
     auto ref_range_in_iter = aie::begin(ref_range_in);
 
+    // Range compressed samples
+    auto rc_in_iter = aie::begin_vector<16>(rc_in);
+
     // Output to backprojection kernel(s)
     auto st_out_iter = aie::begin(slowtime_out);
+    auto rc_out_iter = aie::begin_vector<16>(rc_out);
     
     for(unsigned i=0; i < 1; i++) chess_prepare_for_pipelining {
         *st_out_iter++ = *x_ant_pos_in_iter++;
@@ -28,6 +34,11 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
         *st_out_iter++ = *z_ant_pos_in_iter++;
         *st_out_iter++ = *ref_range_in_iter++;
     }
+
+    for(unsigned i=0; i < RC_SAMPLES/16; i++) chess_prepare_for_pipelining {
+        *rc_out_iter++ = *rc_in_iter++;
+    }
+
 }
 
 // Only needed to satisfy a port connection to img_reconstruct_kern 

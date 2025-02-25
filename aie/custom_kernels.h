@@ -17,7 +17,9 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
                            input_buffer<float, extents<1>>& __restrict y_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict z_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict ref_range_in,
-                           output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out);
+                           input_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                           output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out,
+                           output_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_out);
 
 //void arbiter_kern(input_pktstream *in, output_stream<int> *__restrict out);
 //void arbiter_kern(input_pktstream *in, output_pktstream *out);

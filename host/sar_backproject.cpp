@@ -526,9 +526,13 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
                                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
                                              PULSES*sizeof(float), 
                                              0);
-                
 
         for (int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+            buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc", 
+                                          XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                          RC_SAMPLES*sizeof(cfloat), 
+                                          (pulse_idx*RC_SAMPLES)*sizeof(cfloat));
+
             for (int kern_id = 0; kern_id < IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
                 if (pulse_idx == PULSES-1) {
@@ -577,10 +581,10 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
                 //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array, RC_SAMPLES*sizeof(cfloat));
                 //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*px_per_ai, px_per_ai*sizeof(cfloat));
 
-                buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc[" + std::to_string(kern_id) + "]", 
-                                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                              RC_SAMPLES*sizeof(cfloat), 
-                                              (pulse_idx*RC_SAMPLES)*sizeof(cfloat));
+                //buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc[" + std::to_string(kern_id) + "]", 
+                //                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                //                              RC_SAMPLES*sizeof(cfloat), 
+                //                              (pulse_idx*RC_SAMPLES)*sizeof(cfloat));
 
                 
                 //buff_async_hdls.push_back(buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(kern_id) + "]",

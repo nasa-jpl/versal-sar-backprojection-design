@@ -369,6 +369,9 @@ int main(int argc, char ** argv) {
 
         // Pass in other data into bp AI kernels
         for(int pulse_idx=0; pulse_idx<PULSES; pulse_idx++) {
+
+            bpGraph[inst].gmio_in_rc.gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
+
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
                 if (pulse_idx == PULSES-1) {
@@ -432,7 +435,7 @@ int main(int argc, char ** argv) {
                 // Need to be wiser and stratigically pass in data based on what the input target pixels are for that AI tile
                 //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array, RC_SAMPLES*sizeof(cfloat));
                 //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*px_per_ai, px_per_ai*sizeof(cfloat));
-                bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
+                //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
                 
                 bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
             }

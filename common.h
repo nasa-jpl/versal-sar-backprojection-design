@@ -14,7 +14,7 @@
 
 // Number of pulses to process. This will also be the number of rows of the
 // output image.
-#define PULSES 100
+#define PULSES 50
 
 // Number of image reconstruction solvers
 #define IMG_SOLVERS 8
