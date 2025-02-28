@@ -7,74 +7,208 @@
 \subsection{Overview}
 % =============================================================================
 
-% -----------------------------------------------------------------------------
-% AIE Graph
-% -----------------------------------------------------------------------------
-\begin{figure}[hbtp]
-  \begin{center}
-    \includegraphics[width=\textwidth]
-    {figures/aie_graph.png}
-  \end{center}
-  \caption{AIE Graph Visualization (created with Vitis Analyzer).}
-  \label{fig:aie_graph}
-\end{figure}
-% -----------------------------------------------------------------------------
+The design primarily relies on AIE processing, with the ARM Cortex-A72
+processor managing AIE input, execution flow, and kernel configuration. This
+setup isolates and evaluates the AIE's contribution without involving other
+processing resources such as the FPGA or DSP engines. Future efforts may
+incorporate these additional resources (see Section \ref{sec:future_work}).
 
-The SAR Backprojection implementation employs the spotlight imaging mode
-and leverages all three levels of parallelism offered by the Versal ACAP: 
-SIMD, multicore, and ILP. Due to time constraints, the current design 
-focuses primarily on SIMD and multicore parallelism; future work will
-explore incorporating more ILP for further performance optimization.
+The SAR Backprojection implementation employs spotlight imaging mode and takes
+advantage of all three levels of parallelism offered by the Versal ACAP: SIMD,
+multicore, and ILP. However, due to time constraints, the current design
+primarily focuses on SIMD and multicore parallelism. For more information on
+potential enhancements, refer to Section \ref{sec:future_work}.
 
-Several custom AIE kernel designs with various graph constructs were iterated
-upon. The design merged to implementing the following two custom AIE kernels:
-Slowtime Splicer and Image Reconstruction kernels. The design supports scaling
-the number of Image Reconstruction kernels between 4 and 8, resulting in a
-total AIE kernel count of 5 or 9 respectively. These kernels play a crucial
-role in accelerating the computationally demanding steps of the Backprojection
-algorithm. Additionally, the graph model heavily relies on broadcasting, which
-is a AIE graph construct that allows broadcasting the same data to multiple AIE
-tiles at the same time.
+During development, several custom AIE kernel and graph designs were evaluated.
+The finalized design includes two custom AIE kernels: the Slowtime Splicer
+(STS) and the Image Reconstruction kernel. It also supports scaling the number
+of Image Reconstruction kernels for parallel processing, which can currently be
+instantiated 4 to 8 times. Future work aims to further increase this number
+(see Section \ref{sec:future_work}).
+
+Both the STS and Image Reconstruction kernels play a crucial role in
+accelerating the computationally demanding steps of the Backprojection
+algorithm. A high level overview of the two kernels are given below:
 
 \begin{itemize}
-    \item \textbf{Slowtime Splicer Kernel:} A dedicated AIE kernel responsible 
-        for splicing together slowtime data, comprising antenna x, y, and z 
-        coordinates, as well as range to scene center. This data is received 
-        from the ARM processor and then broadcasted to multiple image
-        reconstruction kernels.
-    \item \textbf{Image Reconstruction Kernels:} These kernels are also 
-        implemented on AIEs and handle the core backprojection processing. They
+    \item \textbf{Slowtime Splicer (STS) Kernel:} A dedicated AIE kernel
+        responsible for broadcasting antenna x, y, and z coordinates, range to
+        scene center and range compressed data to all Image Reconstruction
+        kernels.  
+    \item \textbf{Image Reconstruction Kernels:} A dedicated AIE kernel
+        responsible for handling the core backprojection processing. They
         calculate the differential range for each pixel in the image (m),
-        measuring its relative distance compared to the central pixel. They 
-        perform cumulative summing and phase correction, leveraging the 
+        measuring its relative distance compared to the central pixel. They
+        perform cumulative summing and phase correction, leveraging the
         parallel processing capabilities of the AIEs for efficient execution.
 \end{itemize}
+
+Additionally, the AIE graph model heavily relies on broadcasting, which is a
+AIE graph construct that allows efficiently sending the same data from one
+kernel to multiple other kernels in parallel. The kernels and the graph
+implementation are talked about in more detail in Section \ref{subsec:sts_kern}
+and \ref{subsec:img_recon_kern} below.
 
 % =============================================================================
 \subsection{Data Set}
 % =============================================================================
 
-The data set used is the "Gotcha Volumetric SAR Data Set, Version 
-1.0"~\cite{GOTCHA}. This data set consists of SAR phase history
-data collected at X-band with a 640 MHz bandwidth with full azimuth coverage
-at 8 different elevation angles with full polarization. The imaging scene
-consists of numerous civilian vehicles and calibration targets. The data is
-stored in MATLAB binary format (*.mat files). Each file contains the phase
-history collected over one degree of azimuth for a single pass and a single
-polarization. Loading a file gives a single MATLAB structure with fields
-containing the k-space data, frequencies, x,y,z coordinate antenna locations,
-range to scene center, azimuth angle (degrees), and elevation angle (degrees).
+The data set used is the "Gotcha Volumetric SAR Data Set, Version
+1.0"~\cite{GOTCHA}. This data set consists of SAR phase history data collected
+at X-band with a 640 MHz bandwidth with full azimuth coverage at 8 different
+elevation angles with full polarization. The imaging scene consists of numerous
+civilian vehicles and calibration targets. The data is stored in MATLAB binary
+format (*.mat files). Each file contains the phase history collected over one
+degree of azimuth for a single pass and a single polarization. Loading a file
+gives a single MATLAB structure with fields containing the k-space data,
+frequencies, X, Y, Z coordinate antenna locations, range to scene center,
+azimuth angle (degrees), and elevation angle (degrees).
 
 
 % =============================================================================
-\subsection{Computational Elements}
+\subsection{STS Kernel}
+% =============================================================================
+\label{subsec:sts_kern}
+
+The STS kernel receives its data from the host processor through 5 GMIO ports
+and broadcasts its data via two output ports. Both inputs and outputs are
+configured as ping-pong buffers (as opposed to singular buffers or streaming
+interfaces). The inputs and outputs for the STS kernel are listed below:
+
+\begin{itemize}
+    \item \textbf{x\_ant\_pos\_in (1 float):} The X coordinate of the antenna
+    \item \textbf{y\_ant\_pos\_in (1 float):} The Y coordinate of the antenna
+    \item \textbf{z\_ant\_pos\_in (1 float):} The Z coordinate of the antenna
+    \item \textbf{ref\_range\_in (1 float):} Range to scene center from antenna
+    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Range compressed phase
+        data
+    \item \textbf{slowtime\_out (4 floats):} Antenna X, Y, Z and range to scene
+        center data spliced together 
+    \item \textbf{rc\_out (\textit{RC\_SAMPLES} cfloats):} Range compressed phase
+        data
+\end{itemize}
+
+As mentioned in Section \ref{subsec:aie_graphs}, execution of kernels begin
+when they receive their specified data samples matching their allocated buffer
+size (if using buffers). The list above shows the antenna X, Y, Z and reference
+range buffer sizes each being 1 float (4 bytes per float) and the range
+compressed phase data buffer size being \textit{RC\_SAMPLES} cfloats (8 bytes
+per cfloat), where \textit{RC\_SAMPLES} can variably be set within the
+\textit{common.h} header file. Once the input buffers are completely filled,
+the kernel will execute. Currently, \textit{RC\_SAMPLES} can only be 64 or 128
+cfloats. 128 cfloats is the maximum size due to ping-pong buffer size
+limitations. Future work aims to further increase \textit{RC\_SAMPLES} (see
+Section \ref{sec:future_work}). Once the STS kernel executes, it performs the
+following steps:
+
+\begin{enumerate}
+    \item Pop a single float from \textit{x\_ant\_pos\_in} and push it onto the
+        \textit{slowtime\_out} buffer
+    \item Pop a single float from \textit{y\_ant\_pos\_in} and push it onto the
+        \textit{slowtime\_out} buffer
+    \item Pop a single float from \textit{z\_ant\_pos\_in} and push it onto the
+        \textit{slowtime\_out} buffer
+    \item Pop a single float from \textit{ref\_range\_in} and push it onto the
+        \textit{slowtime\_out} buffer
+    \item The STS kernel now has a full \textit{slowtime\_out} buffer so it
+        will automatically release lock on the \textit{slowtime\_out} buffer
+        and forward that data out from local memory to the next AIE kernel
+        memory in the chain via the AXI4 streaming protocol.
+    \item \label{itm:repeat} Pop 16 cfloats from \textit{rc\_in} (SIMD
+        operation) and push the vector onto the \textit{rc\_out} buffer
+    \item Repeat step~\ref{itm:repeat} for a total of \textit{RC\_SAMPLES}/16
+        times (since 16 samples are pushed at a time)
+    \item The STS kernel now has a full \textit{rc\_out} buffer so it
+        will automatically release lock on the \textit{rc\_out} buffer
+        and forward that data out from local memory to the next AIE kernel
+        memory in the chain via the AXI4 streaming protocol.
+\end{enumerate}
+
+After the STS kernel has been executed and its \textit{slowtime\_out} and
+\textit{rc\_out} are filled, the output data is sent to all instantiated Image
+Reconstruction kernels.
+
+% =============================================================================
+\subsection{Image Reconstruction Kernel}
+% =============================================================================
+\label{subsec:img_recon_kern}
+
+All Image Reconstruction kernels receive its data from the host processor
+through 2 GMIO ports and 2 interconnects from the STS kernel. All Image
+Reconstruction kernels only have a single GMIO output. Both inputs and outputs
+are configured as ping-pong buffers (as opposed to singular buffers or
+streaming interfaces). The inputs and outputs for the Image Reconstruction
+kernel are listed below:
+
+\begin{itemize}
+    \item \textbf{slowtime\_in (4 floats):} Antenna X, Y, Z and range to scene center
+    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Range compressed phase data
+    \item \textbf{xy\_px\_in (\( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \)) cfloats):} X and Y
+        pixels of interest for the target scene, where X is the real component
+        and Y is the imaginary component 
+    \item \textbf{z\_px\_in (\( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \)) floats):} Z pixel of
+        interest for the target scene 
+    \item \textbf{img\_out (\( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \)) floats):} The phase
+        corrected cumulative sum of a partial segment of the total target scene
+        of interest
+    \item \textbf{rtp\_rc\_idx\_offset\_in (1 int):} Not currently used
+    \item \textbf{rtp\_dump\_img\_in (1 int):} RTP from ARM processor. If set
+        to 0, the kernel will continue cumulative sum operations for its
+        current execution. If set to 1, the kernel will push the cumulative sum
+        to the ARM processor after the current execution is finished.
+\end{itemize}
+
+As mentioned in Section \ref{subsec:aie_graphs}, execution of kernels begin
+when they receive their specified data samples matching their allocated buffer
+size (if using buffers). For the Image Reconstruction kernel, this means the
+following condition must be met for it to execute once:
+
+\begin{itemize}
+    \item \textit{slowtime\_in} buffer contains 4 floats from STS kernel
+    \item \textit{rc\_in} buffer contains \textit{RC\_SAMPLES} cfloats from STS
+        kernel
+    \item \textit{xy\_px\_in} buffer contains \( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \) cfloats from a GMIO
+        port
+    \item \textit{z\_px\_in} buffer contains \( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \) floats from a GMIO port
+    \item \textit{rtp\_rc\_idx\_offset\_in} RTP is passed in from the ARM
+        processor
+    \item \textit{rtp\_dump\_img\_in} RTP is passed in from the ARM processor
+\end{itemize}
+
+\noindent Once the Image Reconstruction kernel executes, it performs the following steps:
+
+\begin{enumerate}
+    \item Acquire locks on both \textit{rc\_in} and \textit{img\_out} buffers.
+        Because \textit{rc\_in} and \textit{img\_out} are both asynchronous
+        buffers, the locking and releasing of these buffers must be done
+        manually. NOTE: \textit{rc\_in} no longer needs to be asynchronous.
+\end{enumerate}
+
+% =============================================================================
+\subsection{AIE Graph Implementation}
 % =============================================================================
 
-The design relies on AIE processing, with the ARM Cortex-A72 processor managing
-AIE input, execution flow and kernel configurations for the AIE. This approach
-isolates and analyzes the AIE's contribution without involving other processing
-resources like the FPGA or DSP engines. Future work may involve utilizing these 
-additional resources. 
+% -----------------------------------------------------------------------------
+% AIE Graph
+% -----------------------------------------------------------------------------
+\begin{figure}[hbtp]
+  \tiny
+  \begin{center}
+    \includesvg[width=0.7\textwidth]{figures/aie_5_kern_rc_broadcasting.svg}
+  \end{center}
+  \caption{AIE graph with 1 Slowtime Splicer and 4 Image Reconstruction 
+  kernels.}
+  \label{fig:aie_graph}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+
+
 
 
 

@@ -1,0 +1,23 @@
+% =============================================================================
+\section{Future Work}
+% =============================================================================
+\label{sec:future_work}
+
+- More AIE kernels for processing:
+    - Pixel target generation inside AIE kernels
+    - Pixel target generation from PL to AIE
+    - Have the STS kernel take the pixels from the host and round robin them to
+    the AIE
+    - Build another kernel (separate from the STS) be the arbiter to round
+    robin to the AIE from the processor
+- Increase number of RC\_SAMPLES and PULSES
+    - This may be possible if we can not do ping-pong buffers but singular buffers
+    - Also should look into utilizing memory from neighboring tiles (not sure
+    if that is facilitated for you by the tools or you have to manually invoke
+    that)
+- Incorporating more ILP for further performance optimization.
+- Implement stripmap imaging mode
+- Utilizing FPGA/DSP
+
+
+

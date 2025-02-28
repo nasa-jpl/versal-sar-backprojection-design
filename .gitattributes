@@ -10,6 +10,7 @@
 # Images
 *.[pP][nN][gG] filter=lfs diff=lfs merge=lfs -text
 *.[jJ][pP][gG] filter=lfs diff=lfs merge=lfs -text
+*.[sS][vV][gG] filter=lfs diff=lfs merge=lfs -text
 
 # Email
 *.[mM][sS][gG] filter=lfs diff=lfs merge=lfs -text

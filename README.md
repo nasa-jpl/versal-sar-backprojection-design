@@ -36,6 +36,15 @@ click Download.
 2. `cd versal-design-build/design`
 3. `git lfs install`
 
+## Documentation Generation
+
+The following packages were installed for documentation generation:
+- `latexmk` - Automates compiling LaTeX documents
+- `zathura` - Document viewer
+- `zathura-pdf-poppler` - Plugin to add PDF support for Zathura
+- `texlive-latex-extra` - Adds .svg image support
+- `inkscape` - Graphics support
+
 ## FAQ
 
 1. Why doesn't this repo contain everything necessary to build this design?

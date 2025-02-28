@@ -28,12 +28,14 @@
 \usepackage{graphicx}
 \usepackage{subfig}
 \usepackage{pdflscape}
+\usepackage{svg}
 
 % Misc packages
 \usepackage{verbatim}
 \usepackage{dcolumn}
 \usepackage{ifpdf}
-\usepackage{enumerate}
+%\usepackage{enumerate}
+\usepackage{enumitem}
 
 % PDF Bookmarks and hyperref stuff
 \usepackage[
@@ -69,6 +71,25 @@
 % -----------------------------------------------------------------------------
 % Setup the margins
 % -----------------------------------------------------------------------------
+% lists
+\setlist[enumerate]{
+    leftmargin=2em,
+    labelsep=0.75em,
+    labelwidth=1.5em,
+    itemsep=0pt,
+    topsep=1em,
+    parsep=0pt
+}
+
+\setlist[itemize]{
+    leftmargin=2em,
+    labelsep=0.75em,
+    labelwidth=1.5em,
+    itemsep=0pt,
+    topsep=1em,
+    parsep=0pt
+}
+
 % Footer Template
 
 % Set left margin - The default is 1 inch, so the following
@@ -168,6 +189,8 @@
 \input{sections/versal_overview.tex}
 \clearpage
 \input{sections/implementation.tex}
+\clearpage
+\input{sections/future_work.tex}
 \clearpage
 %\input{sections/challenges.tex}
 %\clearpage
