@@ -18,6 +18,9 @@
 - Incorporating more ILP for further performance optimization.
 - Implement stripmap imaging mode
 - Utilizing FPGA/DSP
+- All RC samples don't need to be passed to all image reconstruction kernels
+because these kernels only need some subset of the range compressed samples.
+This was the intention for the rtp\_rc\_idx\_offset\_in RTP value
 
 
 
