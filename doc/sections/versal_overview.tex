@@ -14,7 +14,7 @@
     \includegraphics[width=\textwidth]
     {figures/aie_array.png}
   \end{center}
-  \caption{AI Engine Array~\cite{AMD_Versal_AM009}}
+  \caption{AI Engine Array \cite{AMD_Versal_AM009}}
   \label{fig:aie_array}
 \end{figure}
 % -----------------------------------------------------------------------------
@@ -44,7 +44,7 @@ comprehensive overview:
         runtime data.
     \item \textbf{Neighbor Memory Sharing} - A tile can directly access its
         adjacent tiles’ memory via hardware locks, expanding effective local
-        storage~\cite{AMD_Versal_UG1079}.
+        storage \cite{AMD_Versal_UG1079}.
     \item \textbf{Cascade Ports} - A dedicated link between adjacent AI Engine
         tiles’ MAC accumulator outputs, used to pass partial sums or
         intermediate results. This path bypasses AXI4 Stream and local memory,
@@ -150,7 +150,7 @@ process or release that data for the next stage.
                     \item Stack, heap, local variables
                     \item Sync locks, ring buffers, etc.
                 \end{itemize}
-            \item Realistically, a ping-pong buffer can be up to ~16 KB each if
+            \item Realistically, a ping-pong buffer can be up to 16 KB each if
                 using double-buffering (i.e. ping-pong buffers).
         \end{itemize}
 
@@ -160,7 +160,7 @@ process or release that data for the next stage.
                 giving a total potential local + neighbor memory of up to 128
                 KB (4× 32 KB) in a 2×2 region.
             \item Requires explicit lock-based
-                coordination~\cite{AMD_Versal_UG1079}.
+                coordination \cite{AMD_Versal_UG1079}.
         \end{itemize}
 
     \item Tile Program Memory

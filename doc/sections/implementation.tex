@@ -13,18 +13,24 @@ setup isolates and evaluates the AIE's contribution without involving other
 processing resources such as the FPGA or DSP engines. Future efforts may
 incorporate these additional resources (see Section \ref{sec:future_work}).
 
-The SAR Backprojection implementation employs spotlight imaging mode and takes
-advantage of all three levels of parallelism offered by the Versal ACAP: SIMD,
-multicore, and ILP. However, due to time constraints, the current design
-primarily focuses on SIMD and multicore parallelism. For more information on
-potential enhancements, refer to Section \ref{sec:future_work}.
+This design builds upon the mathematical formulations presented in "SAR Image
+Formation Toolbox for MATLAB" by Gorham et al. \cite{Gorham}. The focus is on
+spotlight imaging mode, utilizing the GOTCHA Volumetric SAR dataset discussed
+in detail in Section \ref{subsec:dataset}. A parallel processing approach is
+employed to accelerate the algorithm from Gorham et al. This leverages the
+Versal's architecture by utilizing SIMD instructions, multi-core processing,
+and ILP. The current implementation primarily emphasizes SIMD and multi-core
+parallelism. Further exploration of ILP optimization is discussed in Section
+\ref{sec:future_work}. To validate accuracy, focused output images generated
+from both Versal hardware and AIE simulations are compared against image
+artifacts produced by the Matlab code provided in Gorham et al.'s appendix.
 
-During development, several custom AIE kernel and graph designs were evaluated.
-The finalized design includes two custom AIE kernels: the Slowtime Splicer
-(STS) and the Image Reconstruction kernel. It also supports scaling the number
-of Image Reconstruction kernels for parallel processing, which can currently be
-instantiated 4 to 8 times. Future work aims to further increase this number
-(see Section \ref{sec:future_work}).
+During development, several custom AIE kernels and graphs were evaluated. The
+finalized design includes two custom AIE kernels: the Slowtime Splicer (STS)
+and the Image Reconstruction kernel. The design also supports scaling the
+number of Image Reconstruction kernels for parallel processing, which can
+currently be instantiated 4 or 8 times. Future work aims to further increase
+this number (see Section \ref{sec:future_work}).
 
 Both the STS and Image Reconstruction kernels play a crucial role in
 accelerating the computationally demanding steps of the Backprojection
@@ -46,15 +52,17 @@ algorithm. A high level overview of the two kernels are given below:
 Additionally, the AIE graph model heavily relies on broadcasting, which is a
 AIE graph construct that allows efficiently sending the same data from one
 kernel to multiple other kernels in parallel. The kernels and the graph
-implementation are talked about in more detail in Section \ref{subsec:sts_kern}
-and \ref{subsec:img_recon_kern} below.
+implementation are talked about in more detail in Sections
+\ref{subsec:sts_kern}, \ref{subsec:img_recon_kern}, and \ref{subsec:graph_impl}
+below.
 
 % =============================================================================
 \subsection{Data Set}
 % =============================================================================
+\label{subsec:dataset}
 
 The data set used is the "Gotcha Volumetric SAR Data Set, Version
-1.0"~\cite{GOTCHA}. This data set consists of SAR phase history data collected
+1.0" \cite{GOTCHA}. This data set consists of SAR phase history data collected
 at X-band with a 640 MHz bandwidth with full azimuth coverage at 8 different
 elevation angles with full polarization. The imaging scene consists of numerous
 civilian vehicles and calibration targets. The data is stored in MATLAB binary
@@ -66,7 +74,7 @@ azimuth angle (degrees), and elevation angle (degrees).
 
 
 % =============================================================================
-\subsection{STS Kernel}
+\subsection{Slowtime Splicer (STS) Kernel}
 % =============================================================================
 \label{subsec:sts_kern}
 
@@ -116,7 +124,7 @@ following steps:
         memory in the chain via the AXI4 streaming protocol.
     \item \label{itm:repeat} Pop 16 cfloats from \textit{rc\_in} (SIMD
         operation) and push the vector onto the \textit{rc\_out} buffer
-    \item Repeat step~\ref{itm:repeat} for a total of \textit{RC\_SAMPLES}/16
+    \item Repeat step \ref{itm:repeat} for a total of \textit{RC\_SAMPLES}/16
         times (since 16 samples are pushed at a time)
     \item The STS kernel now has a full \textit{rc\_out} buffer so it
         will automatically release lock on the \textit{rc\_out} buffer
@@ -187,11 +195,69 @@ following condition must be met for it to execute once:
         Because \textit{rc\_in} and \textit{img\_out} are both asynchronous
         buffers, the locking and releasing of these buffers must be done
         manually. NOTE: \textit{rc\_in} no longer needs to be asynchronous.
+    \item \label{itm:xyz_simd} Fetch 16 cfloats from the \textit{xy\_px\_in}
+        buffer and extract the real component 16 floats into its own 16 element
+        X vector and extract the imaginary component 16 floats into its own 16
+        element Y vector. Also fetch 16 floats from the \textit{z\_px\_in}
+        buffer. By storing X, Y, and Z pixels of interest for the target scene
+        in their own 16 element vector registers, simultaneous mathematical
+        operations can be performed on these 16 element vector registers with a
+        single clock cycle (i.e. SIMD).
+    \item \label{itm:diff_range} Calculate the differential range from scene
+        center. This occurs at 16 elements per clock cycle by using the X, Y,
+        and Z pixel vectors from step \ref{itm:xyz_simd}.
+    \item \label{itm:diff_range_idx} Divide the differential range vector from
+        step \ref{itm:diff_range} by the range resolution to get an index
+        vector that can later be used for fetching values from the range
+        compressed buffer (used in step \ref{itm:interp}).
+    \item \label{itm:ph_corr} Calculate the phase correction vector for the
+        image by multiplying the differential range vector from step
+        \ref{itm:diff_range} by the phase correction coefficient.
+    \item Because the AIE API \textit{sincos\_complex} function only works if
+        the domain is between $-\pi$ and $\pi$ (otherwise the output of the
+        function will be saturated to -1 or 1), the phase correction vector
+        from step \ref{itm:ph_corr} must be scaled up/down by $2\pi$
+        accordingly to fall within $-\pi$ and $\pi$.
+    \item \label{itm:interp} Because step \ref{itm:diff_range_idx} results in
+        fractional numbers, both the closest lower and upper whole number
+        indices are derived. These integer indices are used to fetch values
+        from the range compressed (\textit{rc\_in}) buffer one at a time
+        (vector operations are no longer used at this point since indexing into
+        buffers can only be done one element at a time). Linear interpolation
+        between the two fetched values of the \textit{rc\_in} buffer provides a
+        more accurate representation of the signal at the desired fractional
+        index.
+    \item \label{itm:px} Take the single interpolated range compressed value
+        from step \ref{itm:interp} and multiply it by the phase corrected value
+        from step \ref{itm:ph_corr} to get the phase corrected pixel in the image.
+    \item \label{itm:img} Cumulatively add the pixel from step \ref{itm:px}
+        into an image array stored in the heap of the AIE tile. This Image
+        array persists across multiple invocations of the kernel. 
+    \item \label{itm:inner_loop} Repeat steps \ref{itm:interp} through
+        \ref{itm:img} for a total of 16 times to loop through all of the
+        indices within the index vector from step \ref{itm:diff_range_idx}.
+    \item Repeat steps \ref{itm:xyz_simd} through \ref{itm:inner_loop} for a
+        total of \( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS} \times 16 }\) times for all
+        of the X, Y and Z pixels of interest within the \textit{xy\_px\_in} and
+        \textit{z\_px\_in} buffers.
+    \item A single invocation of the Image Reconstruction kernel is completed.
+        However, the \textit{img\_out} buffer (intended for transferring the
+        final focused image to the ARM processor) remains unwritten at this
+        point. This is because the kernel must be invoked \textit{PULSES} times
+        to fully focus the image across all pulses. In each invocation, the ARM
+        processor provides updated slowtime data and range compressed samples
+        (prepared by the STS kernel as described in Section
+        \ref{subsec:sts_kern}). During the final pulse, the ARM processor
+        signals the Image Reconstruction kernel to write the accumulated
+        focused image to the \textit{img\_out} buffer for the last invocation
+        by setting the \textit{rtp\_dump\_img\_in} RTP value to 1.
 \end{enumerate}
 
 % =============================================================================
 \subsection{AIE Graph Implementation}
 % =============================================================================
+\label{subsec:graph_impl}
 
 % -----------------------------------------------------------------------------
 % AIE Graph
