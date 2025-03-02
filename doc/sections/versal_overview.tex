@@ -88,31 +88,32 @@ performance of the design will be compromised.
 \subsection{AIE Graphs}
 \label{subsec:aie_graphs}
 
-An AIE program requires a Data Flow Graph (DFG) specification in C++. An
-adaptive data flow (ADF) graph is a network composed of one or more AIE kernels
-connected by data streams. Figure \ref{fig:aie_graph} shows an example of such
-a graph. The ADF graph can interface with the programmable logic (PL), global
-memory, and the host processor through specific constructs. In particular, the
-\textit{input\_plio} and \textit{output\_plio} (programmable logic input/output)
-port objects enable streaming connections to or from the PL, while the
-\textit{input\_gmio} and \textit{output\_gmio} (global memory input/output) port
-objects provide memory-mapped connections to or from global memory (e.g. DDR).
-Additionally, RTP (Runtime Parameter) objects allow setup and control of kernel
-parameters during graph execution.
 
-A graph can include multiple kernels as well as input and output ports. AIE
-graphs support linking kernels to each other and to these ports, with each link
-defined as a connection. Execution begins once the required data samples—those
-matching the buffer or stream size expected by the kernels—are available. The
-graph then produces output data samples corresponding to the buffer or stream
-size expected by each kernel \cite{AMD_Versal_UG1079}.
+An AIE program requires a Data Flow Graph (DFG) specification in C++, known as
+an Adaptive Data Flow (ADF) graph. This graph defines a network of one or more
+AIE kernels connected by data streams. Figure \ref{fig:aie_graph} shows an
+example of such a graph.
 
-The interconnections between AIE tiles use an internal AXI4 Stream fabric, but
-from the developer’s perspective, these connections can be treated as either
-continuous streams or buffer-based windows. When configured in buffer mode
+The ADF graph interfaces with the programmable logic (PL), global memory, and
+the host processor through dedicated constructs. For example, the
+\textit{input\_plio} and \textit{output\_plio} port objects enable streaming
+connections to and from the PL, while the \textit{input\_gmio} and
+\textit{output\_gmio} port objects provide memory-mapped connections to global
+memory (e.g. DDR). Additionally, Runtime Parameter (RTP) objects allow you to
+set up and control kernel parameters during graph execution.
+
+A graph can include multiple kernels and various input/output ports. Kernels
+are connected to each other and to these ports via defined connections.
+Execution begins once the required data samples—matching the buffer or stream
+sizes expected by the kernels—are available, and the graph produces output
+samples accordingly \cite{AMD_Versal_UG1079}.
+
+Internally, the interconnections between AIE tiles use an AXI4 Stream fabric.
+However, from the developer’s perspective, these connections can be treated
+either as continuous streams or as buffer-based windows. In buffer mode
 (window-based I/O), the AIE toolflow abstracts the underlying AXI4 Stream
-mechanism by requiring the entire buffer to be filled before the kernel can
-process or release that data for the next stage.
+mechanism by requiring that an entire buffer be filled before the kernel can
+process or release the data to the next stage.
 
 \subsection{AIE Specification Quick Reference}
 \label{subsec:quick_ref}

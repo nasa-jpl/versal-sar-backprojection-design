@@ -78,7 +78,7 @@ azimuth angle (degrees), and elevation angle (degrees).
 % =============================================================================
 \label{subsec:sts_kern}
 
-The STS kernel receives its data from the host processor through 5 GMIO ports
+The STS kernel receives its data from the ARM processor through 5 GMIO ports
 and broadcasts its data via two output ports. Both inputs and outputs are
 configured as ping-pong buffers (as opposed to singular buffers or streaming
 interfaces). The inputs and outputs for the STS kernel are listed below:
@@ -141,7 +141,7 @@ Reconstruction kernels.
 % =============================================================================
 \label{subsec:img_recon_kern}
 
-All Image Reconstruction kernels receive its data from the host processor
+All Image Reconstruction kernels receive its data from the ARM processor
 through 2 GMIO ports and 2 interconnects from the STS kernel. All Image
 Reconstruction kernels only have a single GMIO output. Both inputs and outputs
 are configured as ping-pong buffers (as opposed to singular buffers or
@@ -239,7 +239,7 @@ following condition must be met for it to execute once:
     \item Repeat steps \ref{itm:xyz_simd} through \ref{itm:inner_loop} for a
         total of \( \frac{\textit{PULSES} \times
         \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS} \times 16 }\) times for all
-        of the X, Y and Z pixels of interest within the \textit{xy\_px\_in} and
+        of the X, Y, and Z pixels of interest within the \textit{xy\_px\_in} and
         \textit{z\_px\_in} buffers.
     \item A single invocation of the Image Reconstruction kernel is completed.
         However, the \textit{img\_out} buffer (intended for transferring the
@@ -254,10 +254,57 @@ following condition must be met for it to execute once:
         by setting the \textit{rtp\_dump\_img\_in} RTP value to 1.
 \end{enumerate}
 
+After the Image Reconstruction kernels has been executed \textit{PULSES} times,
+the ARM processor will read out all Image Reconstruction kernel's
+\textit{img\_out} buffer in a specific way to stitch together the total focused
+image.
+
 % =============================================================================
 \subsection{AIE Graph Implementation}
 % =============================================================================
 \label{subsec:graph_impl}
+
+An AIE design must include a dataflow graph that guides the AIE compiler in
+interconnecting kernels internally and linking them to external domains within
+the Versal chip. For more information on AIE graphs, see Section
+\ref{subsec:aie_graphs}.
+
+The general flow of data originates from the ARM processor. The ARM processor
+provides the antenna X, Y, and Z coordinates, as well as the range to scene
+center from the antenna and the range compressed samples to the STS kernel. Due
+to the limited number of GMIO input ports (max of 32), the graph is configured
+to forward this data to the STS kernel and that graph broadcasts the STS kernel
+output to all Image Reconstruction kernels.
+
+Data originates from the ARM processor, which provides the STS kernel with
+antenna X, Y, and Z coordinates, range to scene center, and range-compressed
+samples. Due to the GMIO's limited input ports (maximum 32), the AIE graph was
+designed to utilize broadcasting to efficiently stream this data from the STS
+kernel to all Image Reconstruction kernels. However, a separate challenge
+arises with the target scene pixel coordinates for the scene of interest. Each
+Image Reconstruction kernel needs its own unique set of these pixel coordinates
+so it can focus its own unique portion of the overall image. Currently, this
+data is directly transmitted from the ARM processor to each Image
+Reconstruction kernel since the data distribution from the ARM processor is
+easier round-robin to the appropriate kernels. However, this direct
+communication approach poses a significant limitation: each Image
+Reconstruction kernel consumes two additional GMIO ports (one GMIO for X/Y and
+one for Z). Consequently, only eight Image Reconstruction kernels can be used
+alongside a single STS kernel within the 32-port limit (totaling 21 GMIO
+inputs). While 11 GMIO ports remain unused, the system's reliance on SIMD
+processing (handling 16 elements simultaneously) restricts the number of Image
+Reconstruction kernels to powers of two. The next power of two (16  Image
+Reconstruction kernels) would equal a total of 37 GMIO input ports needed for
+the graph design, exceed the available input GMIO ports. To address this
+limitation and allow for a greater number of Image Reconstruction kernels, a
+more sophisticated solution is needed than simple direct communication. Future
+work aims to eliminate all GMIO ports going into and out of Image
+Reconstruction kernels so they can be instantiated 100's of times over to
+handle much higher workloads in parallel. See Section \ref{sec:future_work} for
+possible ways of achieving this. 
+
+The Vitis Analyzer tool was used to generate a block diagram of the designed
+AIE graph (shown in figure \ref{fig:aie_graph}).
 
 % -----------------------------------------------------------------------------
 % AIE Graph
