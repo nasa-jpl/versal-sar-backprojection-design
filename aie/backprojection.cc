@@ -8,6 +8,30 @@
 
 using namespace adf;
 
+// Supports up to 32 stream connections
+void px_arbiter_kern(input_stream<float>* __restrict px_xyz_in,
+                     output_pktstream *px_xyz_out) {
+    
+
+    // 3-bit pattern to identify the type of packet
+    int pkt_type = 0;
+
+    for (int switch_idx=0; switch_idx<IMG_SOLVERS; switch_idx++) {
+        // Get packet ID for routing from specific index. Packet ID is automatically
+        // given at compile time and must be fetched indirectly via an index.
+        uint32 pkt_id = getPacketid(px_xyz_out, (IMG_SOLVERS-1)-switch_idx);
+        writeHeader(px_xyz_out, pkt_type, pkt_id);
+        for (int px_idx=0; px_idx<16*3; px_idx++) {
+            float px_xyz_val = readincr(px_xyz_in);
+        
+            //printf("%d: switch_idx: %d | pkt_id: %d | px_xyz_val: %f | tlast: %d\n", 
+            //        px_idx, switch_idx, pkt_id, px_xyz_val, px_idx==(16*3)-1);
+
+            writeincr(px_xyz_out, px_xyz_val, px_idx==(16*3)-1);
+        }
+    }
+}
+
 void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict y_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict z_ant_pos_in,
@@ -38,7 +62,6 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
     for(unsigned i=0; i < RC_SAMPLES/16; i++) chess_prepare_for_pipelining {
         *rc_out_iter++ = *rc_in_iter++;
     }
-
 }
 
 // Only needed to satisfy a port connection to img_reconstruct_kern 
@@ -52,9 +75,10 @@ ImgReconstruct::ImgReconstruct(int id)
 {}
 
 void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                          input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
-                                          input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
+                                          //input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
+                                          //input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
                                           input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                                          input_pktstream *px_xyz_in,
                                           output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                           int rtp_rc_idx_offset_in, int rtp_dump_img_in) {
 
@@ -165,8 +189,9 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     auto rc_in_iter = aie::begin(rc_in);
 
     // X, Y and Z target pixels
-    auto xy_in_iter = aie::begin_vector<16>(xy_px_in);
-    auto z_in_iter = aie::begin_vector<16>(z_px_in);
+    //auto xy_in_iter = aie::begin_vector<16>(xy_px_in);
+    //auto z_in_iter = aie::begin_vector<16>(z_px_in);
+
 
     // Image output
     auto img_out_iter = aie::begin_vector<16>(img_out);
@@ -179,13 +204,32 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     int elem_cnt = 0;
     //cfloat prev_kern_low_rc_bound;
     for(int px_seg_idx=0; px_seg_idx < (PULSES*RC_SAMPLES)/IMG_SOLVERS/16; px_seg_idx++) chess_prepare_for_pipelining {
-        // TODO: I THINK A AI TILE NEEDS TO BE ABLE TO ITERATE MORE THAN JUST ITS "SEGMENT" SIZE
+
+        uint32 header = readincr(px_xyz_in);
+        uint32 id = header & 0x1F;
+        uint32 pkt_type = (header & 0x7000) >> 12;
+        //printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
         
-        // Extract x, y and z pixel vectors
-        auto xy_px_vec = *xy_in_iter++;
-        auto x_pxls_vec = aie::real(xy_px_vec);
-        auto y_pxls_vec = aie::imag(xy_px_vec);
-        auto z_pxls_vec = *z_in_iter++;
+        // Extract x, y and z pixel vectors and convert from int32 to float
+        aie::vector<int32,16> x_pxls_int_vec = aie::zeros<int32,16>();
+        aie::vector<int32,16> y_pxls_int_vec = aie::zeros<int32,16>();
+        aie::vector<int32,16> z_pxls_int_vec = aie::zeros<int32,16>();
+
+        for(int i=0; i<16; i++) {
+            x_pxls_int_vec.set(readincr(px_xyz_in), i);
+            y_pxls_int_vec.set(readincr(px_xyz_in), i);
+            z_pxls_int_vec.set(readincr(px_xyz_in), i);
+        }
+
+        aie::vector<float,16> x_pxls_vec = x_pxls_int_vec.cast_to<float>();
+        aie::vector<float,16> y_pxls_vec = y_pxls_int_vec.cast_to<float>();
+        aie::vector<float,16> z_pxls_vec = z_pxls_int_vec.cast_to<float>();
+
+
+        //auto xy_px_vec = *xy_in_iter++;
+        //auto x_pxls_vec = aie::real(xy_px_vec);
+        //auto y_pxls_vec = aie::imag(xy_px_vec);
+        //auto z_pxls_vec = *z_in_iter++;
 
         //printf("%d IMG_RECON: x_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
         //        x_pxls_vec.get(0),  x_pxls_vec.get(1),  x_pxls_vec.get(2),  x_pxls_vec.get(3), 

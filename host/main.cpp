@@ -102,8 +102,7 @@ int main(int argc, char ** argv) {
     xrt::aie::bo buffers_z_ant_pos_in[INSTANCES];
     xrt::aie::bo buffers_ref_range_in[INSTANCES];
     xrt::aie::bo buffers_rc_in[INSTANCES];
-    xrt::aie::bo buffers_xy_px_in[INSTANCES];
-    xrt::aie::bo buffers_z_px_in[INSTANCES];
+    xrt::aie::bo buffers_xyz_px_in[INSTANCES];
     xrt::aie::bo buffers_img_out[INSTANCES];
 
     // Initialize generic xrt::aie::bo buffer arrays 
@@ -123,12 +122,11 @@ int main(int argc, char ** argv) {
     buffers_z_ant_pos_in[0] = ifcc.m_z_ant_pos_buffer;
     buffers_ref_range_in[0] = ifcc.m_ref_range_buffer;
     buffers_rc_in[0] = ifcc.m_rc_buffer;
-    buffers_xy_px_in[0] = ifcc.m_xy_px_buffer;
-    buffers_z_px_in[0] = ifcc.m_z_px_buffer;
+    buffers_xyz_px_in[0] = ifcc.m_xyz_px_buffer;
     buffers_img_out[0] = ifcc.m_img_buffer;
     SARBackproject::startTime();
     ifcc.bp(buffers_x_ant_pos_in, buffers_y_ant_pos_in, buffers_z_ant_pos_in, buffers_ref_range_in, 
-            buffers_rc_in, buffers_xy_px_in, buffers_z_px_in, buffers_img_out, buff_num);
+            buffers_rc_in, buffers_xyz_px_in, buffers_img_out, buff_num);
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Backprojection completed (AIE)");
     

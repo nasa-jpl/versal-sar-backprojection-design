@@ -306,15 +306,32 @@ int main(int argc, char ** argv) {
     }
 
     // TARGET PIXELS
-    cfloat* xy_px_array = (cfloat*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(cfloat));
-    float* z_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float));
+    //cfloat* xy_px_array = (cfloat*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(cfloat));
+    //float* z_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float));
+    //for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    //    for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+    //        int idx = pulse_idx*RC_SAMPLES + rng_idx;
+    //        xy_px_array[idx] = (cfloat) {(rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES, az_res*pulse_idx - half_az_width};
+    //        z_px_array[idx] = 0.0;
+
+    //        printf("pixels[%d] = {%f, %f}\n", idx, xy_px_array[idx].real, xy_px_array[idx].imag);
+    //    }
+    //}
+    float* xyz_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float)*3);
+    int idx = 0;
     for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
         for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
-            int idx = pulse_idx*RC_SAMPLES + rng_idx;
-            xy_px_array[idx] = (cfloat) {(rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES, az_res*pulse_idx - half_az_width};
-            z_px_array[idx] = 0.0;
+            
+            // X target pixels
+            xyz_px_array[idx++] = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
 
-            printf("pixels[%d] = {%f, %f}\n", idx, xy_px_array[idx].real, xy_px_array[idx].imag);
+            // Y target pixels
+            xyz_px_array[idx++] = az_res*pulse_idx - half_az_width;
+
+            // Z target pixels
+            xyz_px_array[idx++] = 0.0;
+
+            printf("xyz_px_array[%d] = {%f, %f, %f}\n", idx-3, xyz_px_array[idx-3], xyz_px_array[idx-2], xyz_px_array[idx-1]);
         }
     }
     
@@ -371,6 +388,7 @@ int main(int argc, char ** argv) {
         for(int pulse_idx=0; pulse_idx<PULSES; pulse_idx++) {
 
             bpGraph[inst].gmio_in_rc.gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
+            bpGraph[inst].gmio_in_xyz_px[0].gm2aie_nb(xyz_px_array, PULSES*RC_SAMPLES*sizeof(float)*3);
 
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
@@ -382,8 +400,9 @@ int main(int argc, char ** argv) {
                 
                 // IS IT POSSIBLE TO DO MULTIPLE ITERATIONS OF KERNEL WITHOUT IT COUNTING AS A PULESE, BUT JUST TO FORCE MORE 
                 // PIXELS INTO KERNEL FOR CUMULATION? I FEEL THIS FEATURE WOULD BE GOOD FOR EXSTENSABILITY
-                bpGraph[inst].gmio_in_xy_px[kern_id].gm2aie_nb(xy_px_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
-                bpGraph[inst].gmio_in_z_px[kern_id].gm2aie_nb(z_px_array + kern_id*px_per_ai, px_per_ai*sizeof(float));
+                //bpGraph[inst].gmio_in_xy_px[kern_id].gm2aie_nb(xy_px_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
+                //bpGraph[inst].gmio_in_z_px[kern_id].gm2aie_nb(z_px_array + kern_id*px_per_ai, px_per_ai*sizeof(float));
+
                 //float low_x_px_idx_bound = (range_width_seg*3)-(kern_id*range_width_seg);
                 //float high_x_px_idx_bound = (range_width_seg*4)-(kern_id*range_width_seg);
 

@@ -40,10 +40,8 @@ SARBackproject::SARBackproject(const char* xclbin_filename,
 , m_z_ant_pos_array(m_z_ant_pos_buffer.map<float*>())
 , m_ref_range_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
 , m_ref_range_array(m_ref_range_buffer.map<float*>())
-, m_xy_px_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
-, m_xy_px_array(m_xy_px_buffer.map<cfloat*>())
-, m_z_px_buffer(m_device, PULSES*RC_SAMPLES*sizeof(float), xrt::bo::flags::normal, 0)
-, m_z_px_array(m_z_px_buffer.map<float*>())
+, m_xyz_px_buffer(m_device, PULSES*RC_SAMPLES*sizeof(float)*3, xrt::bo::flags::normal, 0)
+, m_xyz_px_array(m_xyz_px_buffer.map<float*>())
 , m_rc_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
 , m_rc_array(m_rc_buffer.map<cfloat*>())
 , m_img_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
@@ -472,13 +470,30 @@ void SARBackproject::genTargetPixels() {
     }
 
     // TARGET PIXELS
+    //for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    //    for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+    //        int idx = pulse_idx*RC_SAMPLES + rng_idx;
+    //        this->m_xy_px_array[idx] = (cfloat) {(rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES, az_res*pulse_idx - half_az_width};
+    //        this->m_z_px_array[idx] = 0.0;
+
+    //        //printf("pixels[%d] = {%f, %f}\n", idx, this->m_xy_px_array[idx].real, this->m_xy_px_array[idx].imag);
+    //    }
+    //}
+    int idx = 0;
     for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
         for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
-            int idx = pulse_idx*RC_SAMPLES + rng_idx;
-            this->m_xy_px_array[idx] = (cfloat) {(rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES, az_res*pulse_idx - half_az_width};
-            this->m_z_px_array[idx] = 0.0;
 
-            //printf("pixels[%d] = {%f, %f}\n", idx, this->m_xy_px_array[idx].real, this->m_xy_px_array[idx].imag);
+            // X target pixels
+            this->m_xyz_px_array[idx++] = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
+
+            // Y target pixels
+            this->m_xyz_px_array[idx++] = az_res*pulse_idx - half_az_width;
+
+            // Z target pixels
+            this->m_xyz_px_array[idx++] = 0.0;
+
+            printf("pixels[%d] = {%f, %f, %f}\n", idx-3, 
+                    this->m_xyz_px_array[idx-3], this->m_xyz_px_array[idx-2], this->m_xyz_px_array[idx-1]);
         }
     }
 }
@@ -496,9 +511,8 @@ void SARBackproject::runGraphs() {
 
 void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
                         xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
-                        xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_xy_px_in, 
-                        xrt::aie::bo* buffers_z_px_in, xrt::aie::bo* buffers_img_out, 
-                        int num_of_buffers) {
+                        xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_xyz_px_in, 
+                        xrt::aie::bo* buffers_img_out, int num_of_buffers) {
     
     std::vector<xrt::bo::async_handle> buff_async_hdls;
     
@@ -526,12 +540,17 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
                                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
                                              PULSES*sizeof(float), 
                                              0);
-
         for (int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
             buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc", 
                                           XCL_BO_SYNC_BO_GMIO_TO_AIE, 
                                           RC_SAMPLES*sizeof(cfloat), 
                                           (pulse_idx*RC_SAMPLES)*sizeof(cfloat));
+            
+            // TODO: the 0 idx in gmio_in_xyz_px will eventaully need to be a value for selecting which 32 port switch to choose
+            buffers_xyz_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xyz_px[" + std::to_string(0) + "]", 
+                                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                              PULSES*RC_SAMPLES*sizeof(float)*3, 
+                                              0);
 
             for (int kern_id = 0; kern_id < IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
@@ -542,15 +561,15 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
                 }
 
                 //printf("kern_id = %d\n", kern_id);
-                buffers_xy_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xy_px[" + std::to_string(kern_id) + "]", 
-                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                 px_per_ai*sizeof(cfloat), 
-                                                 kern_id*px_per_ai*sizeof(cfloat));
+                //buffers_xy_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xy_px[" + std::to_string(kern_id) + "]", 
+                //                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                //                                 px_per_ai*sizeof(cfloat), 
+                //                                 kern_id*px_per_ai*sizeof(cfloat));
 
-                buffers_z_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_px[" + std::to_string(kern_id) + "]", 
-                                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                 px_per_ai*sizeof(float), 
-                                                 kern_id*px_per_ai*sizeof(float));
+                //buffers_z_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_px[" + std::to_string(kern_id) + "]", 
+                //                                 XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                //                                 px_per_ai*sizeof(float), 
+                //                                 kern_id*px_per_ai*sizeof(float));
 
 
                 // Derive RC offsets for AI kernel per pulse. 

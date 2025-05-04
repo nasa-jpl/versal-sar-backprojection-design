@@ -13,6 +13,10 @@ using namespace adf;
 void cplx_conj_kern(input_buffer<cfloat, extents<2048>>& __restrict in, 
                     output_buffer<cfloat, extents<2048>>& __restrict out);
 
+
+void px_arbiter_kern(input_stream<float>* __restrict px_xyz_in,
+                     output_pktstream *px_xyz_out);
+
 void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict y_ant_pos_in,
                            input_buffer<float, extents<1>>& __restrict z_ant_pos_in,
@@ -31,9 +35,10 @@ class ImgReconstruct
     public:
         ImgReconstruct(int id);
         void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                  input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
-                                  input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
+                                  //input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
+                                  //input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
                                   input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                                  input_pktstream *px_xyz_in,
                                   output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                   int rtp_rc_idx_offset_in, int rtp_dump_img_in);
 
