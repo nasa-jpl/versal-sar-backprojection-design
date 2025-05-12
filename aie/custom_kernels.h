@@ -49,9 +49,8 @@ class ImgReconstruct
 
     private:
         uint32 m_id;
-        //uint32 m_iter;
-        //cfloat m_prev_low_rc;
-        //cfloat m_prev_img_val;
+
+        // Used for focusing image over several iterations
         alignas(aie::vector_decl_align) cfloat m_img[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
 };
 

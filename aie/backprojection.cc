@@ -15,19 +15,23 @@ void px_arbiter_kern(input_stream<float>* __restrict px_xyz_in,
 
     // 3-bit pattern to identify the type of packet
     int pkt_type = 0;
+    
+    // Pixel components per AI reconstruction kernel
+    int px_components_per_ai = ((PULSES*RC_SAMPLES)/IMG_SOLVERS)*3;
 
     for (int switch_idx=0; switch_idx<IMG_SOLVERS; switch_idx++) {
         // Get packet ID for routing from specific index. Packet ID is automatically
         // given at compile time and must be fetched indirectly via an index.
-        uint32 pkt_id = getPacketid(px_xyz_out, (IMG_SOLVERS-1)-switch_idx);
+        uint32 pkt_id = getPacketid(px_xyz_out, switch_idx);
         writeHeader(px_xyz_out, pkt_type, pkt_id);
-        for (int px_idx=0; px_idx<16*3; px_idx++) {
+
+        for (int px_idx=0; px_idx<px_components_per_ai; px_idx++) {
             float px_xyz_val = readincr(px_xyz_in);
         
             //printf("%d: switch_idx: %d | pkt_id: %d | px_xyz_val: %f | tlast: %d\n", 
             //        px_idx, switch_idx, pkt_id, px_xyz_val, px_idx==(16*3)-1);
 
-            writeincr(px_xyz_out, px_xyz_val, px_idx==(16*3)-1);
+            writeincr(px_xyz_out, px_xyz_val, px_idx==(px_components_per_ai-1));
         }
     }
 }
@@ -82,19 +86,34 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
                                           output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                           int rtp_rc_idx_offset_in, int rtp_dump_img_in) {
 
-    // Setup header for packet switcher
-    //uint32 switch_id = getPacketid(img_out, 0);
-    //printf("switch_id: %d\n", switch_id);
-    //writeHeader(img_out, 0, switch_id);
     //printf("%d: rtp_rc_idx_offset_in: %d\n", m_id, rtp_rc_idx_offset_in);
 
     // Lock range compressed async buffer
     rc_in.acquire();
     img_out.acquire();
-    
-    // Initalize RTP values
-    //rtp_header_idx_out = -1;
 
+    // Used for buffering X, Y, and Z target pixels from input
+    // NOTE: Target pixels are stored as ints since thats the datatype associated
+    // with pktswitch streams
+    alignas(aie::vector_decl_align) float x_trgt_pxls[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
+    alignas(aie::vector_decl_align) float y_trgt_pxls[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
+    alignas(aie::vector_decl_align) float z_trgt_pxls[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
+
+    // Extract target pixels into buffer for prcessing later in this function
+    uint32 header = readincr(px_xyz_in);
+    //uint32 id = header & 0x1F;
+    //uint32 pkt_type = (header & 0x7000) >> 12;
+    //printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
+    for(int px_idx=0; px_idx < (PULSES*RC_SAMPLES)/IMG_SOLVERS; px_idx++) chess_prepare_for_pipelining {
+        int raw_x = readincr(px_xyz_in);
+        int raw_y = readincr(px_xyz_in);
+        int raw_z = readincr(px_xyz_in);
+
+        x_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_x);
+        y_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_y);
+        z_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_z);
+    }
+    
     // Initalize m_img (don't need to do this if keeping track of valid bounds via RTP params)
     //auto zero_init_vec = aie::zeros<cfloat, 16>();
     //for(int i=0; i<RC_SAMPLES/IMG_SOLVERS/16; i++) {
@@ -102,80 +121,10 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     //}
 
     // Initialize radar params
-    //float min_freq = 9288080400.0;
     float ph_corr_coef = (4*PI*MIN_FREQ)/C;
-    
-    //// TODO: inv_range_res SHOULD BE PASSED IN AS RTP
-    //float range_freq_step = 1471301.6;
-    //float range_width = C/(2.0*range_freq_step);
-    //float range_res = range_width/RC_SAMPLES;
-    //float inv_range_res = 1.0/range_res;
-
-    //float total_az = 0.01726837;
-    //float az_res = C/(2.0*total_az*min_freq);
-    //float az_width = AZ_POINT_SIZE/az_res;
-    ////float az_width = 108.4105;
 
     //// Initialize range and azimuth grid
     int half_size = RC_SAMPLES/2;
-    //int seg_size = RC_SAMPLES/IMG_SOLVERS;
-
-    //int low_px_idx_bound = (seg_size*3)-(m_id*seg_size);
-    //int high_px_idx_bound = (seg_size*4)-(m_id*seg_size);
-
-    //float start_range_px = -range_width/2;
-    //float end_range_px = range_width/2;
-    //float start_az_px = az_width/2.0;
-    //float end_az_px = -az_width/2.0;
-
-    //printf("start_range_px = %f | end_range_px = %f | start_az_px = %f | end_az_px = %f\n", start_range_px, end_range_px, start_az_px, end_az_px);
-
-    //aie::vector<float,16> y_pxls_vec = aie::broadcast<float,16>(start_az_px);
-    ////aie::vector<float,16> y_pxls_vec = aie::broadcast<float,16>(0.0f);
-    //aie::vector<float,16> x_pxls_vec;
-    //for(int i=0; i<16; i++) {
-    //    x_pxls_vec.set(start_range_px + i*range_res, i);
-    //}
-
-    //// Save x_pxls_vec since we will be needing to loop back to start for all y axis points
-    //alignas(aie::vector_decl_align) float x_pxls_start[16];
-    //x_pxls_vec.store(x_pxls_start);
-
-    //cfloat xy_px
-    //for(int i=0; i<16; i++) {
-    //    start_px_bound
-    //}
-    
-
-    // -(seg_size*2) -> -4096
-    // -(seg_size)   -> -2048
-    // (seg_size)    ->  2048
-    // (seg_size*2)  ->  4096
-
-    
-
-    
-    ////Pixel bounds based on segmented range compressed data
-    //float start_px_bound = ((range_width/IMG_SOLVERS)*m_id) - range_width/2;
-    //float end_px_bound = ((range_width/IMG_SOLVERS)*(m_id+1)) - range_width/2;
-    //
-    //m_seg(m_id, m_range_grid.range_width);
-
-    //// Pixel X start and end position on grid
-    //float x_px_st = -5.0;
-    //float x_px_en = 30.0;
-
-    //// Pixel Y start and end position on grid
-    //float y_px_st = -5.0;
-    //float y_px_en = 5.0;
-    //
-    //// Pixel X & Y grid length (32x32)
-    //int x_px_grid_len = 32;
-    //int y_px_grid_len = 32;
-    //
-    //// Pixel X & Y step sizes
-    //float dx = (x_px_en - x_px_st) / (x_px_grid_len - 1);
-    //float dy = (y_px_en - y_px_st) / (y_px_grid_len - 1);
     
     // Extract antenna position and range to scene center from slow time data
     auto st_in_vec_iter = aie::begin_vector<ST_ELEMENTS>(slowtime_in);
@@ -188,42 +137,45 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     // Ranged compressed data in time domain (compressed range lines)
     auto rc_in_iter = aie::begin(rc_in);
 
-    // X, Y and Z target pixels
-    //auto xy_in_iter = aie::begin_vector<16>(xy_px_in);
-    //auto z_in_iter = aie::begin_vector<16>(z_px_in);
-
-
     // Image output
     auto img_out_iter = aie::begin_vector<16>(img_out);
+
+    // Declare X, Y, and Z target pixel int vectors
+    //aie::vector<int,16> x_pxls_int_vec; //= aie::zeros<int32,16>();
+    //aie::vector<int,16> y_pxls_int_vec; //= aie::zeros<int32,16>();
+    //aie::vector<int,16> z_pxls_int_vec; //= aie::zeros<int32,16>();
+
+    // Declare X, Y, and Z target pixel float vectors
+    aie::vector<float,16> x_pxls_vec;
+    aie::vector<float,16> y_pxls_vec;
+    aie::vector<float,16> z_pxls_vec;
     
-    // Precalculate z_diff_sq
-    //auto z_diff_sq = z_ant*z_ant;
-    
-    //bool first_valid_px_idx = false;
-    //bool prev_in_loop = false;
-    int elem_cnt = 0;
-    //cfloat prev_kern_low_rc_bound;
     for(int px_seg_idx=0; px_seg_idx < (PULSES*RC_SAMPLES)/IMG_SOLVERS/16; px_seg_idx++) chess_prepare_for_pipelining {
 
-        uint32 header = readincr(px_xyz_in);
-        uint32 id = header & 0x1F;
-        uint32 pkt_type = (header & 0x7000) >> 12;
-        //printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
-        
-        // Extract x, y and z pixel vectors and convert from int32 to float
-        aie::vector<int32,16> x_pxls_int_vec = aie::zeros<int32,16>();
-        aie::vector<int32,16> y_pxls_int_vec = aie::zeros<int32,16>();
-        aie::vector<int32,16> z_pxls_int_vec = aie::zeros<int32,16>();
+        // Extract X, Y and Z target pixel buffers into their respective pixel vectors
+        x_pxls_vec.load(x_trgt_pxls + px_seg_idx*16);
+        y_pxls_vec.load(y_trgt_pxls + px_seg_idx*16);
+        z_pxls_vec.load(z_trgt_pxls + px_seg_idx*16);
 
-        for(int i=0; i<16; i++) {
-            x_pxls_int_vec.set(readincr(px_xyz_in), i);
-            y_pxls_int_vec.set(readincr(px_xyz_in), i);
-            z_pxls_int_vec.set(readincr(px_xyz_in), i);
-        }
+        //uint32 header = readincr(px_xyz_in);
+        //uint32 id = header & 0x1F;
+        //uint32 pkt_type = (header & 0x7000) >> 12;
+        ////printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
+        //
+        //// Extract x, y and z pixel vectors and convert from int32 to float
+        //aie::vector<int32,16> x_pxls_int_vec = aie::zeros<int32,16>();
+        //aie::vector<int32,16> y_pxls_int_vec = aie::zeros<int32,16>();
+        //aie::vector<int32,16> z_pxls_int_vec = aie::zeros<int32,16>();
 
-        aie::vector<float,16> x_pxls_vec = x_pxls_int_vec.cast_to<float>();
-        aie::vector<float,16> y_pxls_vec = y_pxls_int_vec.cast_to<float>();
-        aie::vector<float,16> z_pxls_vec = z_pxls_int_vec.cast_to<float>();
+        //for(int i=0; i<16; i++) {
+        //    x_pxls_int_vec.set(readincr(px_xyz_in), i);
+        //    y_pxls_int_vec.set(readincr(px_xyz_in), i);
+        //    z_pxls_int_vec.set(readincr(px_xyz_in), i);
+        //}
+
+        //aie::vector<float,16> x_pxls_vec = x_pxls_int_vec.cast_to<float>();
+        //aie::vector<float,16> y_pxls_vec = y_pxls_int_vec.cast_to<float>();
+        //aie::vector<float,16> z_pxls_vec = z_pxls_int_vec.cast_to<float>();
 
 
         //auto xy_px_vec = *xy_in_iter++;
@@ -231,16 +183,16 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
         //auto y_pxls_vec = aie::imag(xy_px_vec);
         //auto z_pxls_vec = *z_in_iter++;
 
-        //printf("%d IMG_RECON: x_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-        //        x_pxls_vec.get(0),  x_pxls_vec.get(1),  x_pxls_vec.get(2),  x_pxls_vec.get(3), 
-        //        x_pxls_vec.get(4),  x_pxls_vec.get(5),  x_pxls_vec.get(6),  x_pxls_vec.get(7),
-        //        x_pxls_vec.get(8),  x_pxls_vec.get(9),  x_pxls_vec.get(10), x_pxls_vec.get(11), 
-        //        x_pxls_vec.get(12), x_pxls_vec.get(13), x_pxls_vec.get(14), x_pxls_vec.get(15));
-        //printf("%d IMG_RECON: y_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-        //        y_pxls_vec.get(0),  y_pxls_vec.get(1),  y_pxls_vec.get(2),  y_pxls_vec.get(3), 
-        //        y_pxls_vec.get(4),  y_pxls_vec.get(5),  y_pxls_vec.get(6),  y_pxls_vec.get(7),
-        //        y_pxls_vec.get(8),  y_pxls_vec.get(9),  y_pxls_vec.get(10), y_pxls_vec.get(11), 
-        //        y_pxls_vec.get(12), y_pxls_vec.get(13), y_pxls_vec.get(14), y_pxls_vec.get(15));
+        printf("%d IMG_RECON: x_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+                x_pxls_vec.get(0),  x_pxls_vec.get(1),  x_pxls_vec.get(2),  x_pxls_vec.get(3), 
+                x_pxls_vec.get(4),  x_pxls_vec.get(5),  x_pxls_vec.get(6),  x_pxls_vec.get(7),
+                x_pxls_vec.get(8),  x_pxls_vec.get(9),  x_pxls_vec.get(10), x_pxls_vec.get(11), 
+                x_pxls_vec.get(12), x_pxls_vec.get(13), x_pxls_vec.get(14), x_pxls_vec.get(15));
+        printf("%d IMG_RECON: y_pxls_vec=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+                y_pxls_vec.get(0),  y_pxls_vec.get(1),  y_pxls_vec.get(2),  y_pxls_vec.get(3), 
+                y_pxls_vec.get(4),  y_pxls_vec.get(5),  y_pxls_vec.get(6),  y_pxls_vec.get(7),
+                y_pxls_vec.get(8),  y_pxls_vec.get(9),  y_pxls_vec.get(10), y_pxls_vec.get(11), 
+                y_pxls_vec.get(12), y_pxls_vec.get(13), y_pxls_vec.get(14), y_pxls_vec.get(15));
         
         /**** CALCULATE DIFFERENTIAL RANGE FOR PIXEL SEGMENTS ****/
         // Calculate this on host to corr pixels to rc...calc boundaries/extremes instead of the whole thing on host
@@ -494,7 +446,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
             //m_img[i] = img;
             //prev_in_loop = true;
 
-            elem_cnt++;
+            //elem_cnt++;
             //}
         }
         //x_pxls_vec = aie::add(x_pxls_vec, range_res*16);

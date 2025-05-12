@@ -17,7 +17,7 @@
 #define PULSES 100
 
 // Number of image reconstruction solvers
-#define IMG_SOLVERS 4
+#define IMG_SOLVERS 16
 
 // Number of slow time elements to process:
 // X position of antenna 

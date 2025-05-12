@@ -317,6 +317,34 @@ int main(int argc, char ** argv) {
     //        printf("pixels[%d] = {%f, %f}\n", idx, xy_px_array[idx].real, xy_px_array[idx].imag);
     //    }
     //}
+    //float* xyz_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float)*3);
+    //int idx = 0;
+    //for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    //    for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+    //        
+    //        // X target pixels
+    //        float x = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
+
+    //        // Y target pixels
+    //        float y = az_res*pulse_idx - half_az_width;
+
+    //        // Z target pixels
+    //        float z = 0.0;
+
+    //        int block = rng_idx / 16;
+    //        int in_block = rng_idx % 16;
+
+    //        int px_idx = block*(PULSES*16) + pulse_idx*16 + in_block;
+    //        int base = px_idx*3;
+
+    //        xyz_px_array[base] = x;
+    //        xyz_px_array[base + 1] = y;
+    //        xyz_px_array[base + 2] = z;
+
+    //        printf("xyz_px_array[%d] = {%f, %f, %f}\n", base/3, xyz_px_array[base], xyz_px_array[base+1], xyz_px_array[base+2]);
+    //    }
+    //}
+    //float* tmp = (float*) malloc(PULSES*RC_SAMPLES*sizeof(float)*3);
     float* xyz_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float)*3);
     int idx = 0;
     for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
@@ -331,9 +359,32 @@ int main(int argc, char ** argv) {
             // Z target pixels
             xyz_px_array[idx++] = 0.0;
 
-            printf("xyz_px_array[%d] = {%f, %f, %f}\n", idx-3, xyz_px_array[idx-3], xyz_px_array[idx-2], xyz_px_array[idx-1]);
+            printf("xyz_px_array[%d] = {%f, %f, %f}\n", (idx-3)/3, xyz_px_array[idx-3], xyz_px_array[idx-2], xyz_px_array[idx-1]);
         }
     }
+
+    //int ROUND_ROBIN_SAMPLES = 16;
+    //for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    //    for(int rc_block_idx = 0; rc_block_idx < RC_SAMPLES/ROUND_ROBIN_SAMPLES; rc_block_idx++) {
+    //        //int src_base = (rc_block_idx*((RC_SAMPLES*PULSES)/IMG_SOLVERS) + pulse_idx*16) * 3;
+    //        int src_base = (pulse_idx*ROUND_ROBIN_SAMPLES + rc_block_idx*RC_SAMPLES) * 3;
+
+    //        int dst_base = (pulse_idx*IMG_SOLVERS*ROUND_ROBIN_SAMPLES + rc_block_idx*ROUND_ROBIN_SAMPLES) * 3;
+
+    //        printf("src_base: %d | dst_base: %d | pulse_idx: %d | rc_block_idx: %d\n", src_base/3, dst_base/3, pulse_idx, rc_block_idx);
+
+    //        memcpy(&xyz_px_array[dst_base], &tmp[src_base], ROUND_ROBIN_SAMPLES * 3 * sizeof(float));
+    //      }
+    //}
+
+    //for (int px_idx = 0; px_idx < PULSES*RC_SAMPLES; px_idx++) {
+    //    int base = px_idx * 3;
+    //    printf("xyz_px_array[%zu] = {%f, %f, %f}\n",
+    //           base/3,
+    //           xyz_px_array[base + 0],    // x
+    //           xyz_px_array[base + 1],    // y
+    //           xyz_px_array[base + 2]);   // z
+    //}
     
     //int img_elem_size = PULSES*RC_SAMPLES;
     int img_byte_size = PULSES*RC_SAMPLES*sizeof(cfloat);
@@ -400,6 +451,7 @@ int main(int argc, char ** argv) {
                 
                 // IS IT POSSIBLE TO DO MULTIPLE ITERATIONS OF KERNEL WITHOUT IT COUNTING AS A PULESE, BUT JUST TO FORCE MORE 
                 // PIXELS INTO KERNEL FOR CUMULATION? I FEEL THIS FEATURE WOULD BE GOOD FOR EXSTENSABILITY
+                //bpGraph[inst].gmio_in_xyz_px[0].gm2aie_nb(xyz_px_array + kern_id*px_per_ai*3, px_per_ai*sizeof(float)*3);
                 //bpGraph[inst].gmio_in_xy_px[kern_id].gm2aie_nb(xy_px_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
                 //bpGraph[inst].gmio_in_z_px[kern_id].gm2aie_nb(z_px_array + kern_id*px_per_ai, px_per_ai*sizeof(float));
 

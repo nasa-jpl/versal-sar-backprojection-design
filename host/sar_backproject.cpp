@@ -492,8 +492,7 @@ void SARBackproject::genTargetPixels() {
             // Z target pixels
             this->m_xyz_px_array[idx++] = 0.0;
 
-            printf("pixels[%d] = {%f, %f, %f}\n", idx-3, 
-                    this->m_xyz_px_array[idx-3], this->m_xyz_px_array[idx-2], this->m_xyz_px_array[idx-1]);
+            //printf("pixels[%d] = {%f, %f, %f}\n", (idx-3)/3, this->m_xyz_px_array[idx-3], this->m_xyz_px_array[idx-2], this->m_xyz_px_array[idx-1]);
         }
     }
 }
@@ -516,7 +515,6 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
     
     std::vector<xrt::bo::async_handle> buff_async_hdls;
     
-    //const int PULSES = 1;
     int px_per_ai = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
 
     //int32 rtp_valid_low_bound_result[4] = {};
