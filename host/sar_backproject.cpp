@@ -591,7 +591,7 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
                 //int rc_idx_offset = rounded_px_idx_bound - rounded_px_idx_bound%2;
                 
                 // TODO: Probably remove this
-                this->m_bp_graph_hdls[buff_idx].update("bpGraph[" + std::to_string(buff_idx) + "].rtp_rc_idx_offset_in[" + std::to_string(kern_id) + "]", 0);
+                //this->m_bp_graph_hdls[buff_idx].update("bpGraph[" + std::to_string(buff_idx) + "].rtp_rc_idx_offset_in[" + std::to_string(kern_id) + "]", 0);
 
 
                 // Need to be wiser and stratigically pass in data based on what the input target pixels are for that AI tile
@@ -608,12 +608,16 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
                 //                                                          XCL_BO_SYNC_BO_AIE_TO_GMIO, 
                 //                                                          px_per_ai*sizeof(cfloat), 
                 //                                                          kern_id*px_per_ai*sizeof(cfloat)));
-                buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(kern_id) + "]",
-                                                XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                                px_per_ai*sizeof(cfloat), 
-                                                kern_id*px_per_ai*sizeof(cfloat));
+                //buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(kern_id) + "]",
+                //                                XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+                //                                px_per_ai*sizeof(cfloat), 
+                //                                kern_id*px_per_ai*sizeof(cfloat));
 
             }
+            buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(0) + "]",
+                                            XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+                                            PULSES*RC_SAMPLES*sizeof(cfloat), 
+                                            0);
 
             
             //TODO: THERE SEEMS TO BE A PROBLEM WITH HOW LONG I WAIT (OR DON'T WAIT) HERE FOR THE AIE TO PASS BACK THE DATA UPON EVERY PULSE. 

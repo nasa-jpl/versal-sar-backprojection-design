@@ -28,19 +28,16 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
 //void arbiter_kern(input_pktstream *in, output_stream<int> *__restrict out);
 //void arbiter_kern(input_pktstream *in, output_pktstream *out);
 
-//void dummy_kern(output_stream<cfloat>* __restrict img_out);
-
 class ImgReconstruct
 {
     public:
         ImgReconstruct(int id);
         void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                  //input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
-                                  //input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
                                   input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
                                   input_pktstream *px_xyz_in,
+                                  //output_pktstream *img_out,
                                   output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
-                                  int rtp_rc_idx_offset_in, int rtp_dump_img_in);
+                                  int rtp_dump_img_in);
 
         static void registerKernelClass()
         { 

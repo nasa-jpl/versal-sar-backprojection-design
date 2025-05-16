@@ -444,9 +444,9 @@ int main(int argc, char ** argv) {
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
                 if (pulse_idx == PULSES-1) {
-                    bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], true);
+                    bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], 1);
                 } else {
-                    bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], false);
+                    bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], 0);
                 }
                 
                 // IS IT POSSIBLE TO DO MULTIPLE ITERATIONS OF KERNEL WITHOUT IT COUNTING AS A PULESE, BUT JUST TO FORCE MORE 
@@ -500,7 +500,7 @@ int main(int argc, char ** argv) {
                 ////printf("dR_bounds: %f | px_idx_bound: %f | rounded_px_idx_bound: %d | rc_idx_offset: %d\n", dR_bounds, px_idx_bound, rounded_px_idx_bound, rc_idx_offset);
 
                 //bpGraph[inst].update(bpGraph[inst].rtp_rc_idx_offset_in[kern_id], rc_idx_offset);
-                bpGraph[inst].update(bpGraph[inst].rtp_rc_idx_offset_in[kern_id], 0);
+                //bpGraph[inst].update(bpGraph[inst].rtp_rc_idx_offset_in[kern_id], 0);
 
 
                 // Need to be wiser and stratigically pass in data based on what the input target pixels are for that AI tile
@@ -508,12 +508,16 @@ int main(int argc, char ** argv) {
                 //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + (3-kern_id)*px_per_ai, px_per_ai*sizeof(cfloat));
                 //bpGraph[inst].gmio_in_rc[kern_id].gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
                 
-                bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
+                //bpGraph[inst].gmio_out_img[kern_id].aie2gm_nb(img_array + kern_id*px_per_ai, px_per_ai*sizeof(cfloat));
             }
-            for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
-                bpGraph[inst].gmio_out_img[kern_id].wait();
-                printf("after wait sig\n");
-            }
+            //for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
+            //    bpGraph[inst].gmio_out_img[kern_id].wait();
+            //    printf("after wait sig\n");
+            //}
+
+            bpGraph[inst].gmio_out_img[0].aie2gm_nb(img_array, (PULSES*RC_SAMPLES)*sizeof(cfloat));
+            bpGraph[inst].gmio_out_img[0].wait();
+            printf("after wait sig\n");
         }
 
         //bpGraph[inst].gmio_out_img.aie2gm_nb(img_array, img_byte_size);

@@ -315,6 +315,7 @@ class BackProjectionGraph: public graph
 
         //***** PACKET SWITCHING OBJECTS *****//
         pktsplit<IMG_SOLVERS> sp;
+        pktmerge<IMG_SOLVERS> mg;
 
     public:
         //***** GMIO PORT OBJECTS *****//
@@ -332,10 +333,9 @@ class BackProjectionGraph: public graph
         // Image reconstruction GMIO ports
         input_gmio gmio_in_xy_px[IMG_SOLVERS];
         input_gmio gmio_in_z_px[IMG_SOLVERS];
-        output_gmio gmio_out_img[IMG_SOLVERS];
+        output_gmio gmio_out_img[1];
 
         //***** RTP PORT OBJECTS *****//
-        input_port rtp_rc_idx_offset_in[IMG_SOLVERS];
         input_port rtp_dump_img_in[IMG_SOLVERS];
 
         BackProjectionGraph() {
@@ -352,12 +352,12 @@ class BackProjectionGraph: public graph
             for (int i=0; i<IMG_SOLVERS; i++) {
                 img_rec_km[i] = kernel::create_object<ImgReconstruct>(i);
             }
-           
 
             //***** PACKET SWITCHING OBJECTS *****//
             
-            // Packet spliter
+            // Packet spliter/merger
             sp = pktsplit<IMG_SOLVERS>::create();
+            mg = pktmerge<IMG_SOLVERS>::create();
 
 
             //***** GMIO PORTS *****//
@@ -373,9 +373,12 @@ class BackProjectionGraph: public graph
             gmio_in_xyz_px[0] = input_gmio::create("gmio_in_xyz_px_" + std::to_string(bp_graph_insts), 256, 1000);
             
             // Image reconstruct GMIO ports
-            for (int i=0; i<IMG_SOLVERS; i++) {
-                gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
-            }
+            //for (int i=0; i<IMG_SOLVERS; i++) {
+            //    gmio_out_img[i] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i), 256, 1000);
+            //}
+
+            // Output image GMIO ports
+            gmio_out_img[0] = output_gmio::create("gmio_out_img_" + std::to_string(bp_graph_insts) + "_" + std::to_string(0), 256, 1000);
 
 
             //***** GMIO CONNECTIONS *****//
@@ -390,10 +393,13 @@ class BackProjectionGraph: public graph
             // Pixel GMIO ports pixel arbiter kernel
             connect(gmio_in_xyz_px[0].out[0], px_arb_km[0].in[0]);
 
+            // Packet merger to GMIO output image
+            connect(mg.out[0], gmio_out_img[0].in[0]);
+
             // Image reconstruction kernel output to GMIO
-            for (int i=0; i<IMG_SOLVERS; i++) {
-                connect(img_rec_km[i].out[0], gmio_out_img[i].in[0]);
-            }
+            //for (int i=0; i<IMG_SOLVERS; i++) {
+            //    connect(img_rec_km[i].out[0], gmio_out_img[i].in[0]);
+            //}
 
 
             //***** AIE TO AIE CONNECTIONS *****//
@@ -412,13 +418,17 @@ class BackProjectionGraph: public graph
             // Pixel arbiter to packet splitter
             connect(px_arb_km[0].out[0], sp.in[0]);
 
+            // Image reconstruction to packet merger
+            for (int i=0; i<IMG_SOLVERS; i++) {
+                connect(img_rec_km[i].out[0], mg.in[i]);
+            }
+
 
             //***** RTP CONNECTIONS *****//
             
             // Image reconstruction to valid_bounds RTP param
             for (int i=0; i<IMG_SOLVERS; i++) {
-                connect<parameter>(rtp_rc_idx_offset_in[i], img_rec_km[i].in[3]);
-                connect<parameter>(rtp_dump_img_in[i], img_rec_km[i].in[4]);
+                connect<parameter>(rtp_dump_img_in[i], img_rec_km[i].in[3]);
             }
 
 

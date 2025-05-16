@@ -68,9 +68,6 @@ void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos
     }
 }
 
-// Only needed to satisfy a port connection to img_reconstruct_kern 
-//void dummy_kern(output_stream<cfloat>* __restrict img_out) {}
-
 ImgReconstruct::ImgReconstruct(int id)
 : m_id(id)
 //, m_iter(0)
@@ -79,32 +76,33 @@ ImgReconstruct::ImgReconstruct(int id)
 {}
 
 void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
-                                          //input_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict xy_px_in,
-                                          //input_buffer<float, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict z_px_in,
                                           input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
                                           input_pktstream *px_xyz_in,
+                                          //output_pktstream *img_out,
                                           output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
-                                          int rtp_rc_idx_offset_in, int rtp_dump_img_in) {
+                                          int rtp_dump_img_in) {
 
     //printf("%d: rtp_rc_idx_offset_in: %d\n", m_id, rtp_rc_idx_offset_in);
 
     // Lock range compressed async buffer
     rc_in.acquire();
-    img_out.acquire();
+    //img_out.acquire();
+    
+    const int SAMPLES = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
 
     // Used for buffering X, Y, and Z target pixels from input
     // NOTE: Target pixels are stored as ints since thats the datatype associated
     // with pktswitch streams
-    alignas(aie::vector_decl_align) float x_trgt_pxls[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
-    alignas(aie::vector_decl_align) float y_trgt_pxls[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
-    alignas(aie::vector_decl_align) float z_trgt_pxls[(PULSES*RC_SAMPLES)/IMG_SOLVERS];
+    alignas(aie::vector_decl_align) float x_trgt_pxls[SAMPLES];
+    alignas(aie::vector_decl_align) float y_trgt_pxls[SAMPLES];
+    alignas(aie::vector_decl_align) float z_trgt_pxls[SAMPLES];
 
     // Extract target pixels into buffer for prcessing later in this function
     uint32 header = readincr(px_xyz_in);
     //uint32 id = header & 0x1F;
     //uint32 pkt_type = (header & 0x7000) >> 12;
     //printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
-    for(int px_idx=0; px_idx < (PULSES*RC_SAMPLES)/IMG_SOLVERS; px_idx++) chess_prepare_for_pipelining {
+    for(int px_idx=0; px_idx < SAMPLES; px_idx++) chess_prepare_for_pipelining {
         int raw_x = readincr(px_xyz_in);
         int raw_y = readincr(px_xyz_in);
         int raw_z = readincr(px_xyz_in);
@@ -150,7 +148,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     aie::vector<float,16> y_pxls_vec;
     aie::vector<float,16> z_pxls_vec;
     
-    for(int px_seg_idx=0; px_seg_idx < (PULSES*RC_SAMPLES)/IMG_SOLVERS/16; px_seg_idx++) chess_prepare_for_pipelining {
+    for(int px_seg_idx=0; px_seg_idx < SAMPLES/16; px_seg_idx++) chess_prepare_for_pipelining {
 
         // Extract X, Y and Z target pixel buffers into their respective pixel vectors
         x_pxls_vec.load(x_trgt_pxls + px_seg_idx*16);
@@ -376,10 +374,10 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
         auto px_delta_idx_vec = aie::sub(px_idx_acc, low_idx_float_vec).to_vector<float>(0);
         
         // TODO: ASSUMING PASSING ALL RC DATA IN
-        //auto shifted_high_idx_int_vec = high_idx_int_vec; //aie::sub(high_idx_int_vec, low_px_idx_bound);
-        //auto shifted_low_idx_int_vec = low_idx_int_vec; //aie::sub(low_idx_int_vec, low_px_idx_bound);
-        auto shifted_high_idx_int_vec = aie::sub(high_idx_int_vec, rtp_rc_idx_offset_in);
-        auto shifted_low_idx_int_vec = aie::sub(low_idx_int_vec, rtp_rc_idx_offset_in);
+        ////auto shifted_high_idx_int_vec = high_idx_int_vec; //aie::sub(high_idx_int_vec, low_px_idx_bound);
+        ////auto shifted_low_idx_int_vec = low_idx_int_vec; //aie::sub(low_idx_int_vec, low_px_idx_bound);
+        //auto shifted_high_idx_int_vec = aie::sub(high_idx_int_vec, rtp_rc_idx_offset_in);
+        //auto shifted_low_idx_int_vec = aie::sub(low_idx_int_vec, rtp_rc_idx_offset_in);
         //printf("%d IMG_RECON: shifted_low_idx_int_vec=[%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d]\n", m_id, 
         //        shifted_low_idx_int_vec.get(0),  shifted_low_idx_int_vec.get(1),  shifted_low_idx_int_vec.get(2),  shifted_low_idx_int_vec.get(3), 
         //        shifted_low_idx_int_vec.get(4),  shifted_low_idx_int_vec.get(5),  shifted_low_idx_int_vec.get(6),  shifted_low_idx_int_vec.get(7),
@@ -423,9 +421,11 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
             //else
             //    rc_delta = rc_in_iter[shifted_high_idx_int_vec.get(i)] - rc_in_iter[shifted_low_idx_int_vec.get(i)];
 
-            rc_delta = rc_in_iter[shifted_high_idx_int_vec.get(px_idx)] - rc_in_iter[shifted_low_idx_int_vec.get(px_idx)];
+            //rc_delta = rc_in_iter[shifted_high_idx_int_vec.get(px_idx)] - rc_in_iter[shifted_low_idx_int_vec.get(px_idx)];
+            rc_delta = rc_in_iter[high_idx_int_vec.get(px_idx)] - rc_in_iter[low_idx_int_vec.get(px_idx)];
             auto px_rc_delta = rc_delta*(float)(px_delta_idx_vec.get(px_idx));
-            auto interp = px_rc_delta+rc_in_iter[shifted_low_idx_int_vec.get(px_idx)];
+            //auto interp = px_rc_delta+rc_in_iter[shifted_low_idx_int_vec.get(px_idx)];
+            auto interp = px_rc_delta+rc_in_iter[low_idx_int_vec.get(px_idx)];
 
             auto img = interp*ph_corr_vec.get(px_idx);
             //auto img = interp;
@@ -467,21 +467,19 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     //m_iter++;
     
     // TODO: I THINK THE IMG_OUT_ITER OUTPUT IS READING FALSE DATA BECAUSE THE PRINT IS RIGHT.
-    auto img_iter = aie::begin_vector<16>(m_img);
-    //aie::vector<cfloat,16> test = aie::broadcast<cfloat,16>((cfloat) {5.0f, 5.0f});
-    for(int i=0; i<(((PULSES*RC_SAMPLES)/IMG_SOLVERS)/16); i++) {
-        //auto my_img = *img_iter++;
-        //auto tmp = aie::real(my_img);
-        
-        //printf("%d IMG_RECON: m_img=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
-        //        tmp.get(0),  tmp.get(1),  tmp.get(2),  tmp.get(3), 
-        //        tmp.get(4),  tmp.get(5),  tmp.get(6),  tmp.get(7),
-        //        tmp.get(8),  tmp.get(9),  tmp.get(10), tmp.get(11), 
-        //        tmp.get(12), tmp.get(13), tmp.get(14), tmp.get(15));
-        if (rtp_dump_img_in) {
+    if (rtp_dump_img_in) {
+
+        //auto img_iter = aie::begin(m_img);
+        auto img_iter = aie::begin_vector<16>(m_img);
+        //for(int i=0; i<SAMPLES; i++) {
+        for(int i=0; i<SAMPLES/16; i++) {
             *img_out_iter++ = *img_iter++;
-            //*img_out_iter++ = my_img;
+            //cfloat val = *img_iter++;
+            //writeincr(img_out, (int)val.real, false);
+            //writeincr(img_out, (int)val.imag, i==(SAMPLES-1));
+
         }
+
     }
 
     // Release buffers to show this kernel is finished working on them
