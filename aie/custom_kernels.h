@@ -35,8 +35,8 @@ class ImgReconstruct
         void img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
                                   input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
                                   input_pktstream *px_xyz_in,
-                                  //output_pktstream *img_out,
-                                  output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
+                                  output_pktstream *img_out,
+                                  //output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                   int rtp_dump_img_in);
 
         static void registerKernelClass()

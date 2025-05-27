@@ -44,8 +44,8 @@ SARBackproject::SARBackproject(const char* xclbin_filename,
 , m_xyz_px_array(m_xyz_px_buffer.map<float*>())
 , m_rc_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
 , m_rc_array(m_rc_buffer.map<cfloat*>())
-, m_img_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
-, m_img_array(m_img_buffer.map<cfloat*>())
+//, m_img_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
+//, m_img_array(m_img_buffer.map<cfloat*>())
 //, m_range_data_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
 //, m_range_data_array(m_range_data_buffer.map<cfloat*>())
 //, m_ref_func_buffer(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0)
@@ -57,26 +57,17 @@ SARBackproject::SARBackproject(const char* xclbin_filename,
 
     // Instantiate kernels, handlers, and buffers for multiple instances
     for(int i = 0; i < this->m_instances; i++) {
-        std::string bpGraph_str = "bpGraph[" + std::to_string(i) + "]";
-        ////std::string dma_hls_fft_kernel_str = "dma_hls:{dma_hls_" + std::to_string(i * 2) + "}";
-        ////std::string dma_hls_ifft_kernel_str = "dma_hls:{dma_hls_" + std::to_string(i * 2 + 1) + "}";
-        //std::string fftGraph_str = "fftGraph[" + std::to_string(i) + "]";
-        //std::string ifftGraph_str = "ifftGraph[" + std::to_string(i) + "]";
-        //std::string cplxConjGraph_str = "cplxConjGraph[" + std::to_string(i) + "]";
-        //std::string hpGraph_str = "hpGraph[" + std::to_string(i) + "]";
+        std::string dma_pkt_router_kernel_str = "dma_pkt_router:{dma_pkt_router_0}";
+        m_dma_pkt_router_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_pkt_router_kernel_str));
+        m_dma_pkt_router_run_hdls.push_back(xrt::run(m_dma_pkt_router_kernels[i]));
+        m_dma_pkt_router_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, m_dma_pkt_router_kernels[i].group_id(1)));
+        //m_dma_pkt_router_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, xrt::bo::flags::normal, 0));
+        //TODO: FIX THIS
+        m_img_array = m_dma_pkt_router_buffers[i].map<cfloat*>();
+        //m_dma_pkt_router_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, m_dma_pkt_router_kernels[i].group_id(1)));
 
-        ////m_dma_hls_fft_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_hls_fft_kernel_str));
-        ////m_dma_hls_fft_run_hdls.push_back(xrt::run(m_dma_hls_fft_kernels[i]));
-        ////m_dma_hls_fft_buffers.push_back(xrt::bo(m_device, BLOCK_SIZE_BYTES, m_dma_hls_fft_kernels[i].group_id(0)));
-        ////m_dma_hls_ifft_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_hls_ifft_kernel_str));
-        ////m_dma_hls_ifft_run_hdls.push_back(xrt::run(m_dma_hls_ifft_kernels[i]));
-        ////m_dma_hls_ifft_buffers.push_back(xrt::bo(m_device, BLOCK_SIZE_BYTES, m_dma_hls_ifft_kernels[i].group_id(0)));
-        this->m_bp_graph_hdls.push_back(xrt::graph(this->m_device, this->m_uuid, bpGraph_str));
-        //m_fft_graph_hdls.push_back(xrt::graph(m_device, m_uuid, fftGraph_str));
-        //m_ifft_graph_hdls.push_back(xrt::graph(m_device, m_uuid, ifftGraph_str));
-        //m_cplx_conj_graph_hdls.push_back(xrt::graph(m_device, m_uuid, cplxConjGraph_str));
-        //m_hp_graph_hdls.push_back(xrt::graph(m_device, m_uuid, hpGraph_str));
-        ////m_aie_to_pl_buffers.push_back(xrt::aie::bo(m_device, BLOCK_SIZE_BYTES, xrt::bo::flags::normal, 0));
+        std::string bpGraph_str = "bpGraph[" + std::to_string(i) + "]";
+        m_bp_graph_hdls.push_back(xrt::graph(this->m_device, this->m_uuid, bpGraph_str));
     }
 
     // Seed random number generator used for selecting
@@ -511,7 +502,7 @@ void SARBackproject::runGraphs() {
 void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
                         xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
                         xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_xyz_px_in, 
-                        xrt::aie::bo* buffers_img_out, int num_of_buffers) {
+                        xrt::bo* buffers_img_out, int num_of_buffers) {
     
     std::vector<xrt::bo::async_handle> buff_async_hdls;
     
@@ -614,10 +605,33 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
                 //                                kern_id*px_per_ai*sizeof(cfloat));
 
             }
-            buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(0) + "]",
-                                            XCL_BO_SYNC_BO_AIE_TO_GMIO, 
-                                            PULSES*RC_SAMPLES*sizeof(cfloat), 
-                                            0);
+            //buffers_img_out[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_out_img[" + std::to_string(0) + "]",
+            //                                XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+            //                                PULSES*RC_SAMPLES*sizeof(cfloat), 
+            //                                0);
+
+
+
+
+            //cols_buff_async_hdls.push_back(buffers_out[i].async("fftColsGraph[" + std::to_string(i) + "].gmio_out", 
+            //                                                    XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+            //                                                    PULSES*RC_SAMPLES*sizeof(cfloat), 
+            //                                                    offset));
+
+
+            // Setup and run PL kernels for data transfer to AIE
+            //for(int i = 0; i < num_of_buffers; i++) {
+            //    rows_buff_async_hdls[i].wait();
+            //    this->m_dma_hls_fft_buffers[i] = xrt::bo(m_aie_to_pl_buffers[i]);
+            //    this->m_dma_hls_fft_buffers[i].sync(XCL_BO_SYNC_BO_TO_DEVICE, BLOCK_SIZE_BYTES, 0);
+            //    this->m_dma_hls_fft_run_hdls[i].set_arg(0, this->m_dma_hls_fft_buffers[i]);
+            //    this->m_dma_hls_fft_run_hdls[i].start();
+            //    cols_buff_async_hdls.push_back(buffers_out[i].async("fftColsGraph[" + std::to_string(i) + "].gmio_out", 
+            //                                                        XCL_BO_SYNC_BO_AIE_TO_GMIO, 
+            //                                                        BLOCK_SIZE_BYTES, 
+            //                                                        offset));
+            //}
+
 
             
             //TODO: THERE SEEMS TO BE A PROBLEM WITH HOW LONG I WAIT (OR DON'T WAIT) HERE FOR THE AIE TO PASS BACK THE DATA UPON EVERY PULSE. 
@@ -632,6 +646,18 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
             //}
             //buff_async_hdls.clear();
         }
+        
+        // Pass xrt::bo pointer to PL kernel's second arg (ddr_mem) so it can write the AIE data to it
+        m_dma_pkt_router_run_hdls[buff_idx].set_arg(1, buffers_img_out[buff_idx]);
+
+        // Launch the PL kernel
+        m_dma_pkt_router_run_hdls[buff_idx].start();
+
+        // Wait for the PL kernel to finish
+        //m_dma_pkt_router_run_hdls[buff_idx].wait();
+
+        // Copy results back to host from PL kernel
+        buffers_img_out[buff_idx].sync(XCL_BO_SYNC_BO_FROM_DEVICE, PULSES*RC_SAMPLES*sizeof(cfloat), 0);
     }
 
 

@@ -14,10 +14,10 @@
 
 // Number of pulses to process. This will also be the number of rows of the
 // output image.
-#define PULSES 1
+#define PULSES 100
 
-// Number of image reconstruction solvers
-#define IMG_SOLVERS 4
+// Number of image reconstruction solvers (must be pwr of 2)
+#define IMG_SOLVERS 8
 
 // Number of slow time elements to process:
 // X position of antenna 

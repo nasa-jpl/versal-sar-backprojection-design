@@ -78,8 +78,8 @@ ImgReconstruct::ImgReconstruct(int id)
 void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
                                           input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
                                           input_pktstream *px_xyz_in,
-                                          //output_pktstream *img_out,
-                                          output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
+                                          output_pktstream *img_out,
+                                          //output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                           int rtp_dump_img_in) {
 
     //printf("%d: rtp_rc_idx_offset_in: %d\n", m_id, rtp_rc_idx_offset_in);
@@ -136,7 +136,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     auto rc_in_iter = aie::begin(rc_in);
 
     // Image output
-    auto img_out_iter = aie::begin_vector<16>(img_out);
+    //auto img_out_iter = aie::begin_vector<16>(img_out);
 
     // Declare X, Y, and Z target pixel int vectors
     //aie::vector<int,16> x_pxls_int_vec; //= aie::zeros<int32,16>();
@@ -468,23 +468,63 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     
     // TODO: I THINK THE IMG_OUT_ITER OUTPUT IS READING FALSE DATA BECAUSE THE PRINT IS RIGHT.
     if (rtp_dump_img_in) {
+        
+        // Create iterator for m_img buffer
+        auto img_iter = aie::begin(m_img);
 
-        //auto img_iter = aie::begin(m_img);
-        auto img_iter = aie::begin_vector<16>(m_img);
-        //for(int i=0; i<SAMPLES; i++) {
-        for(int i=0; i<SAMPLES/16; i++) {
-            *img_out_iter++ = *img_iter++;
-            //cfloat val = *img_iter++;
-            //writeincr(img_out, (int)val.real, false);
-            //writeincr(img_out, (int)val.imag, i==(SAMPLES-1));
+        // Get first element from m_img buffer
+        cfloat img_elem = *img_iter++;
 
+        // Construct and place uint32 header on img_out stream
+        writeHeader(img_out, 0, getPacketid(img_out, 0));
+
+        // Add additional metadata indicating kernel instantiation number
+        writeincr(img_out, m_id, false);
+    
+        // Add two uint32 padding since bus width is 128 bit 
+        writeincr(img_out, 0, false);
+        writeincr(img_out, 0, false);
+
+        for(int i=0; i<SAMPLES-1; i++) chess_prepare_for_pipelining {
+            writeincr(img_out, img_elem.real, false);
+            writeincr(img_out, img_elem.imag, false);
+            img_elem = *img_iter++;
         }
+        writeincr(img_out, img_elem.real, false);
+        writeincr(img_out, img_elem.imag, true);
+
+        //auto img_iter = aie::begin_vector<16>(m_img);
+        //for(int i=0; i<SAMPLES/16; i++) {
+        //    *img_out_iter++ = *img_iter++;
+        //}
+
+        //for(int i=0; i<SAMPLES/16; i++) {
+        //    auto val = *img_iter++;
+        //    printf("%d IMG_RECON: output_image=[%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]\n", m_id, 
+        //            val.get(0).real,  
+        //            val.get(1).real,  
+        //            val.get(2).real,  
+        //            val.get(3).real, 
+        //            val.get(4).real,  
+        //            val.get(5).real,  
+        //            val.get(6).real,  
+        //            val.get(7).real, 
+        //            val.get(8).real, 
+        //            val.get(9).real,  
+        //            val.get(10).real, 
+        //            val.get(11).real, 
+        //            val.get(12).real, 
+        //            val.get(13).real, 
+        //            val.get(14).real, 
+        //            val.get(15).real);
+        //    *img_out_iter++ = val;
+        //}
 
     }
 
     // Release buffers to show this kernel is finished working on them
     rc_in.release();
-    img_out.release();
+    //img_out.release();
 }
 
 
