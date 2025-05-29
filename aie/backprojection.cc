@@ -9,8 +9,8 @@
 using namespace adf;
 
 // Supports up to 32 stream connections
-void px_arbiter_kern(input_stream<float>* __restrict px_xyz_in,
-                     output_pktstream *px_xyz_out) {
+void px_demux_kern(input_stream<float>* __restrict px_xyz_in,
+                   output_pktstream *px_xyz_out) {
     
 
     // 3-bit pattern to identify the type of packet
@@ -36,33 +36,19 @@ void px_arbiter_kern(input_stream<float>* __restrict px_xyz_in,
     }
 }
 
-void slowtime_splicer_kern(input_buffer<float, extents<1>>& __restrict x_ant_pos_in,
-                           input_buffer<float, extents<1>>& __restrict y_ant_pos_in,
-                           input_buffer<float, extents<1>>& __restrict z_ant_pos_in,
-                           input_buffer<float, extents<1>>& __restrict ref_range_in,
-                           input_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
-                           output_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_out,
-                           output_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_out) {
-    // Antenna X, Y, and Z position and reference range to scene center
-    auto x_ant_pos_in_iter = aie::begin(x_ant_pos_in);
-    auto y_ant_pos_in_iter = aie::begin(y_ant_pos_in);
-    auto z_ant_pos_in_iter = aie::begin(z_ant_pos_in);
-    auto ref_range_in_iter = aie::begin(ref_range_in);
+void data_broadcast_kern(input_stream<float>* __restrict slowtime_in,
+                         input_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                         output_stream<float>* __restrict slowtime_out,
+                         output_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_out) {
 
-    // Range compressed samples
+    // Input and output iterators for range compressed samples
     auto rc_in_iter = aie::begin_vector<16>(rc_in);
-
-    // Output to backprojection kernel(s)
-    auto st_out_iter = aie::begin(slowtime_out);
     auto rc_out_iter = aie::begin_vector<16>(rc_out);
     
-    for(unsigned i=0; i < 1; i++) chess_prepare_for_pipelining {
-        *st_out_iter++ = *x_ant_pos_in_iter++;
-        *st_out_iter++ = *y_ant_pos_in_iter++;
-        *st_out_iter++ = *z_ant_pos_in_iter++;
-        *st_out_iter++ = *ref_range_in_iter++;
-    }
-
+    // Write out slowtime data
+    writeincr(slowtime_out, readincr_v<4>(slowtime_in));
+    
+    // Write out RC data
     for(unsigned i=0; i < RC_SAMPLES/16; i++) chess_prepare_for_pipelining {
         *rc_out_iter++ = *rc_in_iter++;
     }
@@ -75,11 +61,10 @@ ImgReconstruct::ImgReconstruct(int id)
 //, m_prev_img_val((cfloat){0.0f, 0.0f})
 {}
 
-void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENTS>>& __restrict slowtime_in,
+void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<BC_ELEMENTS>>& __restrict slowtime_in,
                                           input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
                                           input_pktstream *px_xyz_in,
                                           output_pktstream *img_out,
-                                          //output_async_buffer<cfloat, extents<(PULSES*RC_SAMPLES)/IMG_SOLVERS>>& __restrict img_out,
                                           int rtp_dump_img_in) {
 
     //printf("%d: rtp_rc_idx_offset_in: %d\n", m_id, rtp_rc_idx_offset_in);
@@ -125,7 +110,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<ST_ELEMENT
     int half_size = RC_SAMPLES/2;
     
     // Extract antenna position and range to scene center from slow time data
-    auto st_in_vec_iter = aie::begin_vector<ST_ELEMENTS>(slowtime_in);
+    auto st_in_vec_iter = aie::begin_vector<BC_ELEMENTS>(slowtime_in);
     auto st_in_vec = *st_in_vec_iter++;
     float x_ant = st_in_vec[0];
     float y_ant = st_in_vec[1];

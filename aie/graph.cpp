@@ -65,12 +65,9 @@ int main(int argc, char ** argv) {
     for(int inst=0; inst<INSTANCES; inst++) {
         bpGraph[inst].init();
     }
-   
+
     // OPEN SAR DATASET FILES
-    float* x_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
-    float* y_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
-    float* z_ant_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
-    float* ref_range_data_array = (float*) GMIO::malloc(PULSES*sizeof(float));
+    float* broadcast_data_array = (float*) GMIO::malloc(PULSES*BC_ELEMENTS*sizeof(float));
     
     // Current working dir inside build/hw/aiesim/
     std::ifstream st_file("../../../design/test_data/gotcha_slowtime_pass1_360deg_HH.csv");
@@ -87,16 +84,16 @@ int main(int argc, char ** argv) {
 
         // Read each column from the line and store in respective array
         std::getline(ss, value, ',');
-        x_ant_data_array[pulse_idx] = std::stof(value);
+        broadcast_data_array[BC_ELEMENTS*pulse_idx] = std::stof(value);
 
         std::getline(ss, value, ',');
-        y_ant_data_array[pulse_idx] = std::stof(value);
+        broadcast_data_array[BC_ELEMENTS*pulse_idx + 1] = std::stof(value);
 
         std::getline(ss, value, ',');
-        z_ant_data_array[pulse_idx] = std::stof(value);
+        broadcast_data_array[BC_ELEMENTS*pulse_idx + 2] = std::stof(value);
 
         std::getline(ss, value, ',');
-        ref_range_data_array[pulse_idx] = std::stof(value);
+        broadcast_data_array[BC_ELEMENTS*pulse_idx + 3] = std::stof(value);
 
         pulse_idx++;
     }
@@ -143,7 +140,8 @@ int main(int argc, char ** argv) {
     if (PULSES != 1) {
         double az_ant[PULSES];
         for (int i = 0; i < PULSES; i++) {
-            az_ant[i] = std::atan2(y_ant_data_array[i], x_ant_data_array[i]);
+            // atan2(y_ant_pos / x_ant_pos)
+            az_ant[i] = std::atan2(broadcast_data_array[BC_ELEMENTS*i+1], broadcast_data_array[BC_ELEMENTS*i]);
         }
         unwrap(az_ant);
         double sum_diff = 0.0;
@@ -178,9 +176,6 @@ int main(int argc, char ** argv) {
         }
     }
 
-    //int img_byte_size = PULSES*RC_SAMPLES*sizeof(cfloat);
-    //cfloat* img_array = (cfloat*) GMIO::malloc(img_byte_size);
-    
     // Number of iteration for the AIE graphs to run
     for (int inst = 0; inst < INSTANCES; inst++) {
         bpGraph[inst].run(PULSES);
@@ -197,10 +192,7 @@ int main(int argc, char ** argv) {
         printf("px_per_ai = %d\n", px_per_ai);
         
         // Pass in slowtime data into AI kernels
-        bpGraph[inst].gmio_in_x_ant_pos.gm2aie_nb(x_ant_data_array, PULSES*sizeof(float));
-        bpGraph[inst].gmio_in_y_ant_pos.gm2aie_nb(y_ant_data_array, PULSES*sizeof(float));
-        bpGraph[inst].gmio_in_z_ant_pos.gm2aie_nb(z_ant_data_array, PULSES*sizeof(float));
-        bpGraph[inst].gmio_in_ref_range.gm2aie_nb(ref_range_data_array, PULSES*sizeof(float));
+        bpGraph[inst].gmio_in_st.gm2aie_nb(broadcast_data_array, PULSES*BC_ELEMENTS*sizeof(float));
 
         // Pass in other data into bp AI kernels
         for(int pulse_idx=0; pulse_idx<PULSES; pulse_idx++) {
@@ -210,38 +202,12 @@ int main(int argc, char ** argv) {
 
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
-                if (pulse_idx == PULSES-1) {
+                if (pulse_idx == PULSES-1)
                     bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], 1);
-                } else {
+                else
                     bpGraph[inst].update(bpGraph[inst].rtp_dump_img_in[kern_id], 0);
-                }
             }
-
-            //bpGraph[inst].gmio_out_img[0].aie2gm_nb(img_array, (PULSES*RC_SAMPLES)*sizeof(cfloat));
-            //bpGraph[inst].gmio_out_img[0].wait();
-            //bpGraph[inst].gmio_out_img[0].wait();
-            //printf("after wait sig\n");
         }
-
-        // Open a file for writing
-        // Current working dir inside build/hw/aiesim/
-        //FILE *img_fp = fopen("../../../design/aie/img.csv", "w");
-        //if (img_fp == NULL) {
-        //    perror("Error opening img.csv file");
-        //    return EXIT_FAILURE;
-        //}
-
-        //fprintf(img_fp, "%.12f%+.12fi", img_array[0].real, img_array[0].imag);
-        //for(int i=1; i<PULSES*RC_SAMPLES; i++) {
-        //    if (i%RC_SAMPLES == 0) {
-        //        fprintf(img_fp, "\n");
-        //    }
-        //    fprintf(img_fp, ",%.12f%+.12fi", img_array[i].real, img_array[i].imag);
-        //}
-
-        //for(int i=0; i<PULSES*RC_SAMPLES; i++) {
-        //    printf("array[%d] = {%f, %f}\n", i, img_array[i].real, img_array[i].imag);
-        //}
     }
 
     // Block is needed for PLIO output to completley write to file (otherwise

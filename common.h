@@ -14,17 +14,17 @@
 
 // Number of pulses to process. This will also be the number of rows of the
 // output image.
-#define PULSES 100
+#define PULSES 50
 
 // Number of image reconstruction solvers (must be pwr of 2)
-#define IMG_SOLVERS 8
+#define IMG_SOLVERS 4
 
-// Number of slow time elements to process:
+// Number of broadcasted elements to other AI kernels:
 // X position of antenna 
 // Y position of antenna 
 // Z position of antenna 
 // Range to center of scene (ref_range)
-#define ST_ELEMENTS 4
+#define BC_ELEMENTS 4
 
 // Constants
 static constexpr float PI = 3.1415926535898;

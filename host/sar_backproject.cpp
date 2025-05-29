@@ -32,14 +32,16 @@ SARBackproject::SARBackproject(const char* xclbin_filename,
 , m_instances(instances)
 , m_device(0)
 , m_uuid(m_device.load_xclbin(this->m_xclbin_filename))
-, m_x_ant_pos_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
-, m_x_ant_pos_array(m_x_ant_pos_buffer.map<float*>())
-, m_y_ant_pos_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
-, m_y_ant_pos_array(m_y_ant_pos_buffer.map<float*>())
-, m_z_ant_pos_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
-, m_z_ant_pos_array(m_z_ant_pos_buffer.map<float*>())
-, m_ref_range_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
-, m_ref_range_array(m_ref_range_buffer.map<float*>())
+, m_broadcast_data_buffer(m_device, PULSES*BC_ELEMENTS*sizeof(float), xrt::bo::flags::normal, 0)
+, m_broadcast_data_array(m_broadcast_data_buffer.map<float*>())
+//, m_x_ant_pos_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
+//, m_x_ant_pos_array(m_x_ant_pos_buffer.map<float*>())
+//, m_y_ant_pos_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
+//, m_y_ant_pos_array(m_y_ant_pos_buffer.map<float*>())
+//, m_z_ant_pos_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
+//, m_z_ant_pos_array(m_z_ant_pos_buffer.map<float*>())
+//, m_ref_range_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
+//, m_ref_range_array(m_ref_range_buffer.map<float*>())
 , m_xyz_px_buffer(m_device, PULSES*RC_SAMPLES*sizeof(float)*3, xrt::bo::flags::normal, 0)
 , m_xyz_px_array(m_xyz_px_buffer.map<float*>())
 , m_rc_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
@@ -382,16 +384,16 @@ bool SARBackproject::fetchRadarData() {
 
         // Read each column from the line and store in respective array
         std::getline(ss, value, ',');
-        this->m_x_ant_pos_array[pulse_idx] = std::stof(value);
+        this->m_broadcast_data_array[BC_ELEMENTS*pulse_idx] = std::stof(value);
 
         std::getline(ss, value, ',');
-        this->m_y_ant_pos_array[pulse_idx] = std::stof(value);
+        this->m_broadcast_data_array[BC_ELEMENTS*pulse_idx + 1] = std::stof(value);
 
         std::getline(ss, value, ',');
-        this->m_z_ant_pos_array[pulse_idx] = std::stof(value);
+        this->m_broadcast_data_array[BC_ELEMENTS*pulse_idx + 2] = std::stof(value);
 
         std::getline(ss, value, ',');
-        this->m_ref_range_array[pulse_idx] = std::stof(value);
+        this->m_broadcast_data_array[BC_ELEMENTS*pulse_idx + 3] = std::stof(value);
 
         pulse_idx++;
     }
@@ -443,7 +445,8 @@ void SARBackproject::genTargetPixels() {
     if (PULSES != 1) {
         double az_ant[PULSES];
         for (int i = 0; i < PULSES; i++) {
-            az_ant[i] = std::atan2(this->m_y_ant_pos_array[i], this->m_x_ant_pos_array[i]);
+            // atan2(y_ant_pos / x_ant_pos)
+            az_ant[i] = std::atan2(this->m_broadcast_data_array[BC_ELEMENTS*i + 1], this->m_broadcast_data_array[BC_ELEMENTS*i]);
         }
         this->unwrap(az_ant);
         double sum_diff = 0.0;
@@ -499,10 +502,8 @@ void SARBackproject::runGraphs() {
     }
 }
 
-void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffers_y_ant_pos_in, 
-                        xrt::aie::bo* buffers_z_ant_pos_in, xrt::aie::bo* buffers_ref_range_in,
-                        xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_xyz_px_in, 
-                        xrt::bo* buffers_img_out, int num_of_buffers) {
+void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* buffers_rc_in, 
+        xrt::aie::bo* buffers_xyz_px_in, xrt::bo* buffers_img_out, int num_of_buffers) {
     
     std::vector<xrt::bo::async_handle> buff_async_hdls;
     
@@ -512,23 +513,27 @@ void SARBackproject::bp(xrt::aie::bo* buffers_x_ant_pos_in, xrt::aie::bo* buffer
     //int32 rtp_valid_high_bound_result[4] = {};
 
     for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
-        // Data going to slowtime splicer
-        buffers_x_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_x_ant_pos", 
-                                             XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                             PULSES*sizeof(float), 
-                                             0);
-        buffers_y_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_y_ant_pos", 
-                                             XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                             PULSES*sizeof(float), 
-                                             0);
-        buffers_z_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_ant_pos", 
-                                             XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                             PULSES*sizeof(float), 
-                                             0);
-        buffers_ref_range_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_ref_range", 
-                                             XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                             PULSES*sizeof(float), 
-                                             0);
+        // Slowtime and range compressed data going to data broadcaster splicer
+        buffers_broadcast_data_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_st", 
+                                                  XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                  PULSES*BC_ELEMENTS*sizeof(float), 
+                                                  0);
+        //buffers_x_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_x_ant_pos", 
+        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+        //                                     PULSES*sizeof(float), 
+        //                                     0);
+        //buffers_y_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_y_ant_pos", 
+        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+        //                                     PULSES*sizeof(float), 
+        //                                     0);
+        //buffers_z_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_ant_pos", 
+        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+        //                                     PULSES*sizeof(float), 
+        //                                     0);
+        //buffers_ref_range_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_ref_range", 
+        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+        //                                     PULSES*sizeof(float), 
+        //                                     0);
         for (int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
             buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc", 
                                           XCL_BO_SYNC_BO_GMIO_TO_AIE, 

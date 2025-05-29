@@ -97,10 +97,11 @@ int main(int argc, char ** argv) {
     SARBackproject::printTimeDiff("Run AIE graphs completed (HOST)");
 
     // Initialize bp xrt::aie::bo buffer arrays 
-    xrt::aie::bo buffers_x_ant_pos_in[INSTANCES];
-    xrt::aie::bo buffers_y_ant_pos_in[INSTANCES];
-    xrt::aie::bo buffers_z_ant_pos_in[INSTANCES];
-    xrt::aie::bo buffers_ref_range_in[INSTANCES];
+    xrt::aie::bo buffers_broadcast_data_in[INSTANCES];
+    //xrt::aie::bo buffers_x_ant_pos_in[INSTANCES];
+    //xrt::aie::bo buffers_y_ant_pos_in[INSTANCES];
+    //xrt::aie::bo buffers_z_ant_pos_in[INSTANCES];
+    //xrt::aie::bo buffers_ref_range_in[INSTANCES];
     xrt::aie::bo buffers_rc_in[INSTANCES];
     xrt::aie::bo buffers_xyz_px_in[INSTANCES];
     //xrt::aie::bo buffers_img_out[INSTANCES];
@@ -118,17 +119,18 @@ int main(int argc, char ** argv) {
     int buff_num = 1;
 
     std::cout << "\nPerform Backprojection (AIE)..." << std::endl;
-    buffers_x_ant_pos_in[0] = ifcc.m_x_ant_pos_buffer;
-    buffers_y_ant_pos_in[0] = ifcc.m_y_ant_pos_buffer;
-    buffers_z_ant_pos_in[0] = ifcc.m_z_ant_pos_buffer;
-    buffers_ref_range_in[0] = ifcc.m_ref_range_buffer;
+    buffers_broadcast_data_in[0] = ifcc.m_broadcast_data_buffer;
+    //buffers_x_ant_pos_in[0] = ifcc.m_x_ant_pos_buffer;
+    //buffers_y_ant_pos_in[0] = ifcc.m_y_ant_pos_buffer;
+    //buffers_z_ant_pos_in[0] = ifcc.m_z_ant_pos_buffer;
+    //buffers_ref_range_in[0] = ifcc.m_ref_range_buffer;
     buffers_rc_in[0] = ifcc.m_rc_buffer;
     buffers_xyz_px_in[0] = ifcc.m_xyz_px_buffer;
     //buffers_img_out[0] = ifcc.m_img_buffer;
     buffers_img_out[0] = ifcc.m_dma_pkt_router_buffers[0];
     SARBackproject::startTime();
-    ifcc.bp(buffers_x_ant_pos_in, buffers_y_ant_pos_in, buffers_z_ant_pos_in, buffers_ref_range_in, 
-            buffers_rc_in, buffers_xyz_px_in, buffers_img_out, buff_num);
+    ifcc.bp(buffers_broadcast_data_in, buffers_rc_in, 
+            buffers_xyz_px_in, buffers_img_out, buff_num);
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Backprojection completed (AIE)");
     
