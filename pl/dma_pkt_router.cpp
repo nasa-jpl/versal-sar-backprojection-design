@@ -27,8 +27,8 @@ int dma_pkt_router(hls::stream<ap_axiu<128, 0, 0, 0>> &aie_stream_in,
     // Image data declaration
     ap_axiu<128, 0, 0, 0> img_data;
     
-    // Loop through every image solver kernel
-    IMG_KERNEL_LOOP:for(int kern=0; kern<IMG_SOLVERS; kern++) {
+    // Loop through every image solver kernel on switch
+    IMG_KERNEL_LOOP:for(int kern=0; kern<IMG_SOLVERS_PER_SWITCH; kern++) {
 
         // Read in first 128 bits of packet containing metadata
         metadata = aie_stream_in.read();

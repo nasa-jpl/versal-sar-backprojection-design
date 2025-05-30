@@ -57,16 +57,24 @@ SARBackproject::SARBackproject(const char* xclbin_filename,
     //file_id = H5Fcreate("test.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
     //H5Fclose(file_id);
 
+
     // Instantiate kernels, handlers, and buffers for multiple instances
+    // TODO: Instances wont work right if it is greater than 1. This is fine
+    // for now since there are not plans to instantiate the design more than
+    // once, but would be nice if this still worked for future proofing
     for(int i = 0; i < this->m_instances; i++) {
-        std::string dma_pkt_router_kernel_str = "dma_pkt_router:{dma_pkt_router_0}";
-        m_dma_pkt_router_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_pkt_router_kernel_str));
-        m_dma_pkt_router_run_hdls.push_back(xrt::run(m_dma_pkt_router_kernels[i]));
-        m_dma_pkt_router_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, m_dma_pkt_router_kernels[i].group_id(1)));
-        //m_dma_pkt_router_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, xrt::bo::flags::normal, 0));
-        //TODO: FIX THIS
-        m_img_array = m_dma_pkt_router_buffers[i].map<cfloat*>();
-        //m_dma_pkt_router_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, m_dma_pkt_router_kernels[i].group_id(1)));
+        for(int sw_id = 0; sw_id < AIE_SWITCHES; sw_id++) {
+            std::string dma_pkt_router_kernel_str = "dma_pkt_router:{dma_pkt_router_" + std::to_string(sw_id) + "}";
+            m_dma_pkt_router_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_pkt_router_kernel_str));
+            m_dma_pkt_router_run_hdls.push_back(xrt::run(m_dma_pkt_router_kernels[sw_id]));
+        }
+        
+        // All kernel instances map to the same DDR memory bank. This means
+        // kernel1.group_id(1) should return the same bank ID as
+        // kernel0.group_id(1). Therefore, it doesnt matter which instances
+        // group_id is used, the result is the same memory bank.
+        m_img_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, m_dma_pkt_router_kernels[0].group_id(1)));
+        m_img_arrays.push_back(m_img_buffers[i].map<cfloat*>());
 
         std::string bpGraph_str = "bpGraph[" + std::to_string(i) + "]";
         m_bp_graph_hdls.push_back(xrt::graph(this->m_device, this->m_uuid, bpGraph_str));
@@ -357,13 +365,15 @@ bool SARBackproject::writeImg() {
         std::cerr << "Error opening image output file!" << std::endl;
         return 1;
     }
-
-    fprintf(img_fp, "%.12f%+.12fi", this->m_img_array[0].real, this->m_img_array[0].imag);
+    
+    // Only looking at the first instance of m_img_arrays (assumes the design
+    // is only instantiated once)
+    fprintf(img_fp, "%.12f%+.12fi", this->m_img_arrays[0][0].real, this->m_img_arrays[0][0].imag);
     for(int i=1; i<PULSES*RC_SAMPLES; i++) {
         if (i%RC_SAMPLES == 0) {
             fprintf(img_fp, "\n");
         }
-        fprintf(img_fp, ",%.12f%+.12fi", this->m_img_array[i].real, this->m_img_array[i].imag);
+        fprintf(img_fp, ",%.12f%+.12fi", this->m_img_arrays[0][i].real, this->m_img_arrays[0][i].imag);
     }
     return 0;
 }
@@ -507,7 +517,9 @@ void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* b
     
     std::vector<xrt::bo::async_handle> buff_async_hdls;
     
-    int px_per_ai = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
+    // Number of target pixels for each px_demux_kern to process
+    int px_per_demux_kern = (PULSES*RC_SAMPLES)/AIE_SWITCHES;
+    //int px_per_ai = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
 
     //int32 rtp_valid_low_bound_result[4] = {};
     //int32 rtp_valid_high_bound_result[4] = {};
@@ -518,33 +530,19 @@ void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* b
                                                   XCL_BO_SYNC_BO_GMIO_TO_AIE, 
                                                   PULSES*BC_ELEMENTS*sizeof(float), 
                                                   0);
-        //buffers_x_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_x_ant_pos", 
-        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-        //                                     PULSES*sizeof(float), 
-        //                                     0);
-        //buffers_y_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_y_ant_pos", 
-        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-        //                                     PULSES*sizeof(float), 
-        //                                     0);
-        //buffers_z_ant_pos_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_z_ant_pos", 
-        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-        //                                     PULSES*sizeof(float), 
-        //                                     0);
-        //buffers_ref_range_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_ref_range", 
-        //                                     XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-        //                                     PULSES*sizeof(float), 
-        //                                     0);
         for (int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
             buffers_rc_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_rc", 
                                           XCL_BO_SYNC_BO_GMIO_TO_AIE, 
                                           RC_SAMPLES*sizeof(cfloat), 
                                           (pulse_idx*RC_SAMPLES)*sizeof(cfloat));
             
-            // TODO: the 0 idx in gmio_in_xyz_px will eventaully need to be a value for selecting which 32 port switch to choose
-            buffers_xyz_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xyz_px[" + std::to_string(0) + "]", 
-                                              XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                              PULSES*RC_SAMPLES*sizeof(float)*3, 
-                                              0);
+
+            for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
+                buffers_xyz_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xyz_px[" + std::to_string(sw_id) + "]", 
+                                                  XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+                                                  px_per_demux_kern*sizeof(float)*3, 
+                                                  sw_id*px_per_demux_kern*sizeof(float)*3);
+            }
 
             for (int kern_id = 0; kern_id < IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
@@ -652,14 +650,20 @@ void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* b
             //buff_async_hdls.clear();
         }
         
-        // Pass xrt::bo pointer to PL kernel's second arg (ddr_mem) so it can write the AIE data to it
-        m_dma_pkt_router_run_hdls[buff_idx].set_arg(1, buffers_img_out[buff_idx]);
+        for(int sw_id = 0; sw_id < AIE_SWITCHES; sw_id++) {
+            int pl_kern_id = buff_idx*m_instances + sw_id;
 
-        // Launch the PL kernel
-        m_dma_pkt_router_run_hdls[buff_idx].start();
+            // Pass xrt::bo pointer to PL kernel's second arg (ddr_mem) so it can write the AIE data to it
+            m_dma_pkt_router_run_hdls[pl_kern_id].set_arg(1, buffers_img_out[buff_idx]);
 
-        // Wait for the PL kernel to finish
-        //m_dma_pkt_router_run_hdls[buff_idx].wait();
+            // Launch the PL kernel
+            m_dma_pkt_router_run_hdls[pl_kern_id].start();
+        }
+
+        // Wait for the PL kernels to finish
+        //for(int sw_id = 0; sw_id < AIE_SWITCHES; sw_id++) {
+        //    m_dma_pkt_router_run_hdls[buff_idx*m_instances + sw_id].wait();
+        //}
 
         // Copy results back to host from PL kernel
         buffers_img_out[buff_idx].sync(XCL_BO_SYNC_BO_FROM_DEVICE, PULSES*RC_SAMPLES*sizeof(cfloat), 0);

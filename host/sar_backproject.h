@@ -64,8 +64,8 @@ class SARBackproject {
         xrt::aie::bo m_rc_buffer;
         cfloat* m_rc_array;
         //xrt::aie::bo m_img_buffer;
-        xrt::bo m_img_buffer;
-        cfloat* m_img_array;
+        //xrt::bo m_img_buffer;
+        //cfloat* m_img_array;
         //xrt::aie::bo m_range_data_buffer;
         //cfloat* m_range_data_array;
         //xrt::aie::bo m_ref_func_buffer;
@@ -114,7 +114,8 @@ class SARBackproject {
         // PL dma_pkt_router kernel handlers and buffers 
         std::vector<xrt::kernel> m_dma_pkt_router_kernels;
         std::vector<xrt::run> m_dma_pkt_router_run_hdls;
-        std::vector<xrt::bo> m_dma_pkt_router_buffers;
+        std::vector<xrt::bo> m_img_buffers;
+        std::vector<cfloat*> m_img_arrays;
 
         // PL dma_hls fft kernel handlers and buffers 
         //std::vector<xrt::kernel> m_dma_hls_fft_kernels;

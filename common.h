@@ -10,14 +10,22 @@
 
 // Number of range compression samples. This will also be the number of columns
 // of the output image.
-#define RC_SAMPLES 64
+#define RC_SAMPLES 256
 
 // Number of pulses to process. This will also be the number of rows of the
 // output image.
-#define PULSES 50
+#define PULSES 100
+
+// Number of AIE switches to use
+#define AIE_SWITCHES 2
+
+// Number of image reconstruction solvers per switch. It must be a power of 2
+// and the max number of image solvers on a switch is 32
+#define IMG_SOLVERS_PER_SWITCH 32
 
 // Number of image reconstruction solvers (must be pwr of 2)
-#define IMG_SOLVERS 4
+#define IMG_SOLVERS (AIE_SWITCHES*IMG_SOLVERS_PER_SWITCH)
+
 
 // Number of broadcasted elements to other AI kernels:
 // X position of antenna 

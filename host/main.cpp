@@ -127,7 +127,7 @@ int main(int argc, char ** argv) {
     buffers_rc_in[0] = ifcc.m_rc_buffer;
     buffers_xyz_px_in[0] = ifcc.m_xyz_px_buffer;
     //buffers_img_out[0] = ifcc.m_img_buffer;
-    buffers_img_out[0] = ifcc.m_dma_pkt_router_buffers[0];
+    buffers_img_out[0] = ifcc.m_img_buffers[0];
     SARBackproject::startTime();
     ifcc.bp(buffers_broadcast_data_in, buffers_rc_in, 
             buffers_xyz_px_in, buffers_img_out, buff_num);

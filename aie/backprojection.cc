@@ -19,7 +19,7 @@ void px_demux_kern(input_stream<float>* __restrict px_xyz_in,
     // Pixel components per AI reconstruction kernel
     int px_components_per_ai = ((PULSES*RC_SAMPLES)/IMG_SOLVERS)*3;
 
-    for (int switch_idx=0; switch_idx<IMG_SOLVERS; switch_idx++) {
+    for (int switch_idx=0; switch_idx<IMG_SOLVERS_PER_SWITCH; switch_idx++) {
         // Get packet ID for routing from specific index. Packet ID is automatically
         // given at compile time and must be fetched indirectly via an index.
         uint32 pkt_id = getPacketid(px_xyz_out, switch_idx);

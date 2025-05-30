@@ -1,6 +1,6 @@
 // By: Austin Owens
 // Date: 6/3/2024
-// Desc: Using Vitis DSP lib to perform 1D FFT operation
+// Desc: ADF graph for backprojection
 
 #pragma once
 
@@ -21,14 +21,14 @@ class BackProjectionGraph: public graph
         kernel data_bc_km;
 
         // Pixel demux kernel module
-        kernel px_demux_km[1];
+        kernel px_demux_km[AIE_SWITCHES];
 
         // Image reconstruction kernel module
         kernel img_rec_km[IMG_SOLVERS];
 
         //***** PACKET SWITCHING OBJECTS *****//
-        pktsplit<IMG_SOLVERS> sp;
-        pktmerge<IMG_SOLVERS> mg;
+        pktsplit<IMG_SOLVERS_PER_SWITCH> sp[AIE_SWITCHES];
+        pktmerge<IMG_SOLVERS_PER_SWITCH> mg[AIE_SWITCHES];
 
     public:
         //***** GMIO PORT OBJECTS *****//
@@ -38,13 +38,13 @@ class BackProjectionGraph: public graph
         input_gmio gmio_in_rc;
 
         // Pixel demux GMIO ports
-        input_gmio gmio_in_xyz_px[1];
+        input_gmio gmio_in_xyz_px[AIE_SWITCHES];
 
 
         //***** PLIO PORT OBJECTS *****//
 
         // Packet router PLIO ports
-        output_plio plio_pkt_rtr_out[1];
+        output_plio plio_pkt_rtr_out[AIE_SWITCHES];
 
 
         //***** RTP PORT OBJECTS *****//
@@ -57,8 +57,10 @@ class BackProjectionGraph: public graph
             // Data broadcaster kernel
             data_bc_km = kernel::create(data_broadcast_kern);
 
-            // Pixel demux kernel
-            px_demux_km[0] = kernel::create(px_demux_kern);
+            // Pixel demux kernels
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                px_demux_km[i] = kernel::create(px_demux_kern);
+            }
             
             // Image reconstruct kernel
             for (int i=0; i<IMG_SOLVERS; i++) {
@@ -67,9 +69,11 @@ class BackProjectionGraph: public graph
 
             //***** PACKET SWITCHING OBJECTS *****//
             
-            // Packet spliter/merger
-            sp = pktsplit<IMG_SOLVERS>::create();
-            mg = pktmerge<IMG_SOLVERS>::create();
+            // Packet spliters/mergers
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                sp[i] = pktsplit<IMG_SOLVERS_PER_SWITCH>::create();
+                mg[i] = pktmerge<IMG_SOLVERS_PER_SWITCH>::create();
+            }
 
 
             //***** GMIO PORTS *****//
@@ -79,13 +83,18 @@ class BackProjectionGraph: public graph
             gmio_in_rc = input_gmio::create("gmio_in_rc_" + std::to_string(bp_graph_insts), 256, 1000);
 
             // Pixel demux GMIO ports
-            gmio_in_xyz_px[0] = input_gmio::create("gmio_in_xyz_px_" + std::to_string(bp_graph_insts), 256, 1000);
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                std::string xyz_px_str = "gmio_in_xyz_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i);
+                gmio_in_xyz_px[i] = input_gmio::create(xyz_px_str.c_str(), 256, 1000);
+            }
             
 
             //***** PLIO PORTS *****//
-            std::string data_file_str = "aie_to_plio_switch_" + std::to_string(0) + ".csv";
-            std::string port_name_str = "plio_pkt_rtr_out_" + std::to_string(bp_graph_insts) + "_" + std::to_string(0);
-            plio_pkt_rtr_out[0] = output_plio::create(port_name_str.c_str(), plio_128_bits, data_file_str.c_str());
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                std::string data_file_str = "aie_to_plio_switch_" + std::to_string(i) + ".csv";
+                std::string pkt_rtr_str = "plio_pkt_rtr_out_" + std::to_string(bp_graph_insts) + "_" + std::to_string(i);
+                plio_pkt_rtr_out[i] = output_plio::create(pkt_rtr_str.c_str(), plio_128_bits, data_file_str.c_str());
+            }
 
 
             //***** GMIO CONNECTIONS *****//
@@ -95,10 +104,14 @@ class BackProjectionGraph: public graph
             connect(gmio_in_rc.out[0], data_bc_km.in[1]);
 
             // Pixel GMIO ports pixel demux kernel
-            connect(gmio_in_xyz_px[0].out[0], px_demux_km[0].in[0]);
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                connect(gmio_in_xyz_px[i].out[0], px_demux_km[i].in[0]);
+            }
 
             // Packet merger to PLIO packet router
-            connect(mg.out[0], plio_pkt_rtr_out[0].in[0]);
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                connect(mg[i].out[0], plio_pkt_rtr_out[i].in[0]);
+            }
 
 
             //***** AIE TO AIE CONNECTIONS *****//
@@ -109,17 +122,23 @@ class BackProjectionGraph: public graph
                 connect(data_bc_km.out[1], img_rec_km[i].in[1]);
             }
 
-            // Packet splitter to image reconstruction
-            for (int i=0; i<IMG_SOLVERS; i++) {
-                connect(sp.out[i], img_rec_km[i].in[2]);
+            // Packet splitters to image reconstruction
+            for (int j=0; j<AIE_SWITCHES; j++) {
+                for (int i=0; i<IMG_SOLVERS_PER_SWITCH; i++) {
+                    connect(sp[j].out[i], img_rec_km[IMG_SOLVERS_PER_SWITCH*j + i].in[2]);
+                }
             }
 
-            // Pixel demux to packet splitter
-            connect(px_demux_km[0].out[0], sp.in[0]);
+            // Pixel demux to packet splitters
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                connect(px_demux_km[i].out[0], sp[i].in[0]);
+            }
 
-            // Image reconstruction to packet merger
-            for (int i=0; i<IMG_SOLVERS; i++) {
-                connect(img_rec_km[i].out[0], mg.in[i]);
+            // Image reconstruction to packet mergers
+            for (int j=0; j<AIE_SWITCHES; j++) {
+                for (int i=0; i<IMG_SOLVERS_PER_SWITCH; i++) {
+                    connect(img_rec_km[IMG_SOLVERS_PER_SWITCH*j + i].out[0], mg[j].in[i]);
+                }
             }
 
 
@@ -134,7 +153,9 @@ class BackProjectionGraph: public graph
             //***** SOURCE FILES *****//
 
             source(data_bc_km) = "backprojection.cc";
-            source(px_demux_km[0]) = "backprojection.cc";
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                source(px_demux_km[i]) = "backprojection.cc";
+            }
             for (int i=0; i<IMG_SOLVERS; i++)
                 source(img_rec_km[i]) = "backprojection.cc";
 
@@ -142,7 +163,9 @@ class BackProjectionGraph: public graph
             //***** RUNTIME RATIOS *****//
 
             runtime<ratio>(data_bc_km) = 1.0;
-            runtime<ratio>(px_demux_km[0]) = 1.0;
+            for (int i=0; i<AIE_SWITCHES; i++) {
+                runtime<ratio>(px_demux_km[i]) = 1.0;
+            }
             for (int i=0; i<IMG_SOLVERS; i++)
                 runtime<ratio>(img_rec_km[i]) = 1.0;
 

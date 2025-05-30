@@ -181,16 +181,15 @@ int main(int argc, char ** argv) {
         bpGraph[inst].run(PULSES);
     }
 
+    // Number of target pixels for each px_demux_kern to process
+    int px_per_demux_kern = ((PULSES*RC_SAMPLES)/AIE_SWITCHES);
+
     // Loop through pipeline ITER times
     int inst = 0;
     
     for(int iter=0; iter<ITER; iter++) {
         printf("\nPERFORM BACKPROJECTION (ITER = %d) (INST = %d)\n", iter, inst);
 
-        int px_per_ai = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
-        int rc_per_ai = RC_SAMPLES/IMG_SOLVERS;
-        printf("px_per_ai = %d\n", px_per_ai);
-        
         // Pass in slowtime data into AI kernels
         bpGraph[inst].gmio_in_st.gm2aie_nb(broadcast_data_array, PULSES*BC_ELEMENTS*sizeof(float));
 
@@ -198,7 +197,9 @@ int main(int argc, char ** argv) {
         for(int pulse_idx=0; pulse_idx<PULSES; pulse_idx++) {
 
             bpGraph[inst].gmio_in_rc.gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
-            bpGraph[inst].gmio_in_xyz_px[0].gm2aie_nb(xyz_px_array, PULSES*RC_SAMPLES*sizeof(float)*3);
+            for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
+                bpGraph[inst].gmio_in_xyz_px[sw_id].gm2aie_nb(xyz_px_array + sw_id*px_per_demux_kern*3, px_per_demux_kern*sizeof(float)*3);
+            }
 
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image
