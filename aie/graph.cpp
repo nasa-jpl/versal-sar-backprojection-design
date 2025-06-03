@@ -4,10 +4,6 @@
 
 #include "graph.h"
 
-uint8_t fft_graph_insts = 0;
-uint8_t ifft_graph_insts = 0;
-uint8_t cplx_conj_graph_insts = 0;
-uint8_t hp_graph_insts = 0;
 uint8_t bp_graph_insts = 0;
 
 const int INSTANCES = 1;
@@ -198,7 +194,7 @@ int main(int argc, char ** argv) {
 
             bpGraph[inst].gmio_in_rc.gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
             for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
-                bpGraph[inst].gmio_in_xyz_px[sw_id].gm2aie_nb(xyz_px_array + sw_id*px_per_demux_kern*3, px_per_demux_kern*sizeof(float)*3);
+                bpGraph[inst].bpCluster[sw_id].gmio_in_xyz_px.gm2aie_nb(xyz_px_array + sw_id*px_per_demux_kern*3, px_per_demux_kern*sizeof(float)*3);
             }
 
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {

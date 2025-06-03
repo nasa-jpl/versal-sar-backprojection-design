@@ -29,7 +29,8 @@ int main() {
     for(int pl_kern=0; pl_kern<AIE_SWITCHES; pl_kern++) {
 
         // Current working dir inside versal-design-build/build/hw/plsim/dma_pkt_router_testbench/solution1/csim/build
-        std::string aie_data_str = "../../../../../aiesim/aiesimulator_output/aie_to_plio_switch_" + std::to_string(pl_kern) + ".csv";
+        // Assumes there is only one instance of bpGraph (hence the 0 on aie_to_plio_switch_0_*)
+        std::string aie_data_str = "../../../../../aiesim/aiesimulator_output/aie_to_plio_switch_0_" + std::to_string(pl_kern) + ".csv";
         std::ifstream infile(aie_data_str.c_str());
         if (!infile.is_open()) {
             std::cerr << "ERROR: Cannot open input CSV file.\n\n";

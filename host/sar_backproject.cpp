@@ -538,7 +538,7 @@ void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* b
             
 
             for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
-                buffers_xyz_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_xyz_px[" + std::to_string(sw_id) + "]", 
+                buffers_xyz_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].bpCluster[" + std::to_string(sw_id) + "].gmio_in_xyz_px", 
                                                   XCL_BO_SYNC_BO_GMIO_TO_AIE, 
                                                   px_per_demux_kern*sizeof(float)*3, 
                                                   sw_id*px_per_demux_kern*sizeof(float)*3);
