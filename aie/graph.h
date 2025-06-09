@@ -32,10 +32,13 @@ class BackProjectionSubgraph: public graph {
         //***** GMIO PORT OBJECTS *****//
 
         // Pixel demux GMIO port
-        input_gmio gmio_in_xyz_px;
+        //input_gmio gmio_in_xyz_px;
 
 
         //***** PLIO PORT OBJECTS *****//
+
+        // Stride PLIO port
+        input_plio plio_stride_in;
 
         // Packet router PLIO port
         output_plio plio_pkt_rtr_out;
@@ -62,21 +65,27 @@ class BackProjectionSubgraph: public graph {
             //***** GMIO PORTS *****//
 
             // Pixel demux GMIO ports
-            std::string xyz_px_str = "gmio_in_xyz_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts);
-            gmio_in_xyz_px = input_gmio::create(xyz_px_str.c_str(), 256, 1000);
+            //std::string xyz_px_str = "gmio_in_xyz_px_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts);
+            //gmio_in_xyz_px = input_gmio::create(xyz_px_str.c_str(), 256, 1000);
             
 
             //***** PLIO PORTS *****//
 
-            std::string plio_data_file_str = "aie_to_plio_switch_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts) + ".csv";
-            std::string plio_pkt_rtr_str = "plio_pkt_rtr_out_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts);
-            plio_pkt_rtr_out = output_plio::create(plio_pkt_rtr_str.c_str(), plio_128_bits, plio_data_file_str.c_str());
+            // PLIO Stride Controller Input
+            std::string plio_to_aie_sim_str = "plio_to_aie_switch_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts) + ".csv";
+            std::string plio_stride_str = "plio_stride_in_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts);
+            plio_stride_in = input_plio::create(plio_stride_str.c_str(), plio_128_bits, plio_to_aie_sim_str.c_str());
 
+            
+            // PLIO Packet Router Output
+            std::string aie_to_plio_sim_str = "aie_to_plio_switch_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts) + ".csv";
+            std::string plio_pkt_rtr_str = "plio_pkt_rtr_out_" + std::to_string(bp_graph_insts) + "_" + std::to_string(bp_subgraph_insts);
+            plio_pkt_rtr_out = output_plio::create(plio_pkt_rtr_str.c_str(), plio_128_bits, aie_to_plio_sim_str.c_str());
 
             //***** GMIO CONNECTIONS *****//
 
             // Pixel GMIO ports pixel demux kernel
-            connect(gmio_in_xyz_px.out[0], px_demux_km.in[0]);
+            connect(plio_stride_in.out[0], px_demux_km.in[0]);
 
             // Packet merger to PLIO packet router
             connect(mg.out[0], plio_pkt_rtr_out.in[0]);

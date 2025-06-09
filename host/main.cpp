@@ -103,7 +103,7 @@ int main(int argc, char ** argv) {
     //xrt::aie::bo buffers_z_ant_pos_in[INSTANCES];
     //xrt::aie::bo buffers_ref_range_in[INSTANCES];
     xrt::aie::bo buffers_rc_in[INSTANCES];
-    xrt::aie::bo buffers_xyz_px_in[INSTANCES];
+    //xrt::bo buffers_xyz_px_in[INSTANCES];
     //xrt::aie::bo buffers_img_out[INSTANCES];
     xrt::bo buffers_img_out[INSTANCES];
 
@@ -125,12 +125,12 @@ int main(int argc, char ** argv) {
     //buffers_z_ant_pos_in[0] = ifcc.m_z_ant_pos_buffer;
     //buffers_ref_range_in[0] = ifcc.m_ref_range_buffer;
     buffers_rc_in[0] = ifcc.m_rc_buffer;
-    buffers_xyz_px_in[0] = ifcc.m_xyz_px_buffer;
+    //buffers_xyz_px_in[0] = ifcc.m_xyz_px_buffers[0];
     //buffers_img_out[0] = ifcc.m_img_buffer;
     buffers_img_out[0] = ifcc.m_img_buffers[0];
     SARBackproject::startTime();
     ifcc.bp(buffers_broadcast_data_in, buffers_rc_in, 
-            buffers_xyz_px_in, buffers_img_out, buff_num);
+            buffers_img_out, buff_num);
     SARBackproject::endTime();
     SARBackproject::printTimeDiff("Backprojection completed (AIE)");
     

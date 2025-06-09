@@ -1,5 +1,5 @@
 // By: Austin Owens
-// Date: 7/3/2024
+// Date: 6/4/2025
 // Desc: Header for DMA packet router controller
 
 #pragma once
@@ -12,5 +12,5 @@
 ////////////////////////////////////////////////////////////
 // Top Function of DMA packet router controller
 ////////////////////////////////////////////////////////////
-int dma_pkt_router(hls::stream<ap_axiu<128, 0, 0, 0>> &aie_stream_in,
+int dma_pkt_router(hls::stream<ap_axiu<128, 0, 0, 0>> &pl_stream_in,
                    ap_uint<64>* ddr_mem);

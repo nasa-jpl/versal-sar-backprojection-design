@@ -172,13 +172,141 @@ int main(int argc, char ** argv) {
         }
     }
 
+    //// 2) Allocate a second array to hold the correct ordering:
+    //float* reordered = (float*)GMIO::malloc(PULSES * RC_SAMPLES * 3 * sizeof(float));
+    //
+    //// 3) Compute how many blocks per row:
+    //const int BLOCK = 16;
+    //const int NUM_BLOCKS = RC_SAMPLES / BLOCK;  // e.g. 64/16 = 4
+    //
+    //// 4) For every row j and every block b, memcpy that 16-point chunk into its new slot:
+    //for (int j = 0; j < PULSES; j++) {
+    //    for (int b = 0; b < NUM_BLOCKS; b++) {
+    //        // Original chunk starts at row j, block b of size BLOCK points:
+    //        size_t original_offset_bytes = ((size_t)j * RC_SAMPLES + (size_t)b * BLOCK) * 3 * sizeof(float);
+    //    
+    //        // In the reordered array, this should land at:
+    //        size_t target_offset_bytes = ((size_t)b * PULSES * BLOCK + (size_t)j * BLOCK) * 3 * sizeof(float);
+    //    
+    //        // Copy BLOCK points (each point = 3 floats):
+    //        memcpy(reinterpret_cast<char*>(reordered) + target_offset_bytes,
+    //               reinterpret_cast<char*>(xyz_px_array) + original_offset_bytes,
+    //               (size_t)BLOCK * 3 * sizeof(float));
+    //    }
+    //}
+    //
+    //// 5) (Optional) Verify a few entries:
+    //for (int i = 0; i < PULSES * RC_SAMPLES; i++) {
+    //    float x = reordered[i * 3 + 0];
+    //    float y = reordered[i * 3 + 1];
+    //    float z = reordered[i * 3 + 2];
+    //    printf("reordered[%d] = {%f, %f, %f}\n", i, x, y, z);
+    //}
+
+    //int px_per_chunk = 16;
+    //int total_px = PULSES*RC_SAMPLES;
+    //int px_per_solver = total_px/IMG_SOLVERS;
+    //int chunks_per_solver = px_per_solver/px_per_chunk;
+    //int chunks_per_switch = IMG_SOLVERS_PER_SWITCH*chunks_per_solver;
+    //int chunks_per_pulse = RC_SAMPLES/px_per_chunk;
+
+    //float* xyz_px_array = (float*) GMIO::malloc(total_px*sizeof(float)*3);
+
+    //// Create a 3D view of xyz_px_array so we can index [solver][pixel_in_solver][coord]
+    ////float (*xyz_px_array_3d)[px_per_solver][3] = (float (*)[px_per_solver][3]) xyz_px_array;
+
+    //int global_px = 0;
+    //for(int range_block = 0; range_block < chunks_per_pulse; range_block++) {
+    //    for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    //        for(int px_in_chunk = 0; px_in_chunk < px_per_chunk; px_in_chunk++) {
+    //        
+    //            // 1) Derive X, Y, and Z target pixels
+    //            int rng_idx = range_block * px_per_chunk + px_in_chunk;
+    //            float x_px = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
+    //            float y_px = az_res*pulse_idx - half_az_width;
+    //            float z_px = 0.0;
+
+
+    //            // 2) Which chunk the global_px belongs to
+    //            int chunk_num = global_px / px_per_chunk;
+
+    //            // 3) Which switch cluster the chunk is in
+    //            int switch_idx = chunk_num / chunks_per_switch;
+
+    //            // 4) Within this switch, which chunk-slot is it
+    //            int within_switch = chunk_num % chunks_per_switch;
+
+    //            // 5) Which solver within that switch
+    //            int solver_within_switch = within_switch % IMG_SOLVERS_PER_SWITCH;
+
+    //            // 6) Which chunk-index inside that solver
+    //            int chunk_within_solver = within_switch / IMG_SOLVERS_PER_SWITCH;  
+
+    //            // 7) Absolute solver id
+    //            int solver_id = switch_idx * IMG_SOLVERS_PER_SWITCH + solver_within_switch;
+    //    
+    //            // 8) Within that solver's block, which pixel index
+    //            //int px_in_chunk = global_px % px_per_chunk;
+    //            int px_idx_in_solver = chunk_within_solver * px_per_chunk + px_in_chunk;
+
+
+
+    //            // 9) Sort in X, Y and Z 3D array
+    //            int xyz_idx = solver_id * px_per_solver + px_idx_in_solver;
+    //            int float_xyz_idx = xyz_idx*3;
+    //            //xyz_px_array_3d[solver_id][px_idx_in_solver][0] = x_px;
+    //            //xyz_px_array_3d[solver_id][px_idx_in_solver][1] = y_px;
+    //            //xyz_px_array_3d[solver_id][px_idx_in_solver][2] = z_px;
+    //            xyz_px_array[float_xyz_idx+0] = x_px;
+    //            xyz_px_array[float_xyz_idx+1] = y_px;
+    //            xyz_px_array[float_xyz_idx+2] = z_px;
+
+    //            // 10) Advance global_pixel
+    //            global_px++;
+
+    //            printf("range_blk: %d | pulse_idx: %d | px_in_chunk: %d | chunk_num: %d | switch_idx: %d | within_switch: %d | solver_within_switch: %d | chunk_within_solver: %d | solver_id: %d | px_idx_in_solver: %d | xyz_idx: %d | x: %f | y: %f\n", 
+    //                    range_block,
+    //                    pulse_idx,
+    //                    px_in_chunk,
+    //                    chunk_num, 
+    //                    switch_idx, 
+    //                    within_switch, 
+    //                    solver_within_switch, 
+    //                    chunk_within_solver,
+    //                    solver_id,
+    //                    px_idx_in_solver,
+    //                    xyz_idx,
+    //                    x_px,
+    //                    y_px);
+    //        }
+
+    //    }
+    //}
+
+    //for (int px = 0;  px < total_px;  px++) {
+    //    int idx = px * 3;
+    //    float x = xyz_px_array[idx + 0];
+    //    float y = xyz_px_array[idx + 1];
+    //    float z = xyz_px_array[idx + 2];
+    //    printf("xyz_px_array[%d] = {%f, %f, %f}\n", idx/3, x, y, z);
+    //}
+    
+    //int idx = 0;
+    //for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    //    for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+    //        idx+=3;
+    //        printf("xyz_px_array[%d] = {%f, %f, %f}\n", (idx-3)/3, xyz_px_array[idx-3], xyz_px_array[idx-2], xyz_px_array[idx-1]);
+    //    }
+    //}
+
+
     // Number of iteration for the AIE graphs to run
     for (int inst = 0; inst < INSTANCES; inst++) {
         bpGraph[inst].run(PULSES);
     }
 
     // Number of target pixels for each px_demux_kern to process
-    int px_per_demux_kern = ((PULSES*RC_SAMPLES)/AIE_SWITCHES);
+    //int px_per_demux_kern = ((PULSES*RC_SAMPLES)/AIE_SWITCHES);
 
     // Loop through pipeline ITER times
     int inst = 0;
@@ -193,9 +321,9 @@ int main(int argc, char ** argv) {
         for(int pulse_idx=0; pulse_idx<PULSES; pulse_idx++) {
 
             bpGraph[inst].gmio_in_rc.gm2aie_nb(rc_array + pulse_idx*RC_SAMPLES, RC_SAMPLES*sizeof(cfloat));
-            for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
-                bpGraph[inst].bpCluster[sw_id].gmio_in_xyz_px.gm2aie_nb(xyz_px_array + sw_id*px_per_demux_kern*3, px_per_demux_kern*sizeof(float)*3);
-            }
+            //for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
+            //    bpGraph[inst].bpCluster[sw_id].gmio_in_xyz_px.gm2aie_nb(xyz_px_array + sw_id*px_per_demux_kern*3, px_per_demux_kern*sizeof(float)*3);
+            //}
 
             for(int kern_id=0; kern_id<IMG_SOLVERS; kern_id++) {
                 // Dump image if on last pulse, otherwise keep focusing the image

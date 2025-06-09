@@ -16,21 +16,21 @@ int main() {
     // Total number of AXIS 128b samples. The divide by 2 comes from the AXIS
     // bus being 128 bits (one cfloat is 64 bits) and the +IMG_SOLVERS comes
     // from each img solver kernel generating a 128b metadata header
-    const int AXIS128_SAMPLES = (PULSES*RC_SAMPLES)/2 + IMG_SOLVERS;
+    const int AXIS128_SAMPLES = (AZ_SAMPLES*RC_SAMPLES)/2 + IMG_SOLVERS;
 
-    hls::stream<ap_axiu<128, 0, 0, 0>> aie_stream_in;
+    hls::stream<ap_axiu<128, 0, 0, 0>> pl_stream_in;
 
     // Allocate DDR memory buffer
-    ap_uint<64>* ddr_mem = (ap_uint<64>*) malloc(PULSES*RC_SAMPLES*8);
-    for (int i = 0; i < PULSES*RC_SAMPLES; i++)
+    ap_uint<64>* ddr_mem = (ap_uint<64>*) malloc(AZ_SAMPLES * RC_SAMPLES * sizeof(ap_uint<64>));
+    for (int i = 0; i < AZ_SAMPLES*RC_SAMPLES; i++)
         ddr_mem[i] = 0;
     
     // Loop through AIE data AXI Streams (each iteration is representative of calling another instance of the PL kernel)
-    for(int pl_kern=0; pl_kern<AIE_SWITCHES; pl_kern++) {
+    for(int switch_num=0; switch_num<AIE_SWITCHES; switch_num++) {
 
         // Current working dir inside versal-design-build/build/hw/plsim/dma_pkt_router_testbench/solution1/csim/build
         // Assumes there is only one instance of bpGraph (hence the 0 on aie_to_plio_switch_0_*)
-        std::string aie_data_str = "../../../../../aiesim/aiesimulator_output/aie_to_plio_switch_0_" + std::to_string(pl_kern) + ".csv";
+        std::string aie_data_str = "../../../../../aiesim/aiesimulator_output/aie_to_plio_switch_0_" + std::to_string(switch_num) + ".csv";
         std::ifstream infile(aie_data_str.c_str());
         if (!infile.is_open()) {
             std::cerr << "ERROR: Cannot open input CSV file.\n\n";
@@ -101,18 +101,18 @@ int main() {
             pkt.last = tlast_flag;
             pkt.keep = (ap_uint<16>) (tkeep_val & 0xFFFF);
 
-            // Write data into aie_stream_in
-            aie_stream_in.write(pkt);
+            // Write data into pl_stream_in
+            pl_stream_in.write(pkt);
         }
 
         // PL kernel invocation
-        int ret = dma_pkt_router(aie_stream_in, ddr_mem);
+        int ret = dma_pkt_router(pl_stream_in, ddr_mem);
 
     }
 
     // Open a file for writing. Current working dir inside 
-    // versal-design-build/design/pl/tb/dma_pkt_router_testbench/solution1/csim/build
-    FILE *img_fp = fopen("../../../../output_img.csv", "w");
+    // versal-design-build/build/hw/plsim/dma_pkt_router_testbench/solution1/csim/build
+    FILE *img_fp = fopen("../../../../plsimulator_output/output_img.csv", "w");
     if (img_fp == NULL) {
         perror("Error opening output_img.csv file");
         return 1;
@@ -121,7 +121,7 @@ int main() {
     float *ddr_mem_f = reinterpret_cast<float*>(ddr_mem);
 
     fprintf(img_fp, "%.12f%+.12fi", ddr_mem_f[0], ddr_mem_f[1]);
-    for(int i=1; i<PULSES*RC_SAMPLES; i++) {
+    for(int i=1; i<AZ_SAMPLES*RC_SAMPLES; i++) {
         if (i%RC_SAMPLES == 0) {
             fprintf(img_fp, "\n");
         }
@@ -131,12 +131,12 @@ int main() {
 
     // Print output buffer contents
     printf("Raw AIE AXI Stream data (identical to aiesim CSV content but correctly reordered):\n");
-    for (int i = 0; i < PULSES*RC_SAMPLES; i++)
+    for (int i = 0; i < AZ_SAMPLES*RC_SAMPLES; i++)
         printf("ddr_mem[%d] = %u, %u\n", i, 
                                          (uint32_t)(ddr_mem[i] & 0xFFFFFFFF),
                                          (uint32_t)(ddr_mem[i]>>32));
 
-    printf("\nSuccessfully wrote output image to versal-design-build/plsim/output_img.csv\n\n");
+    printf("\nSuccessfully wrote output image to versal-design-build/build/plsim/plsimulator_output/output_img.csv\n\n");
 
     free(ddr_mem);
 

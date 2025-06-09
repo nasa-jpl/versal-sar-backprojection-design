@@ -8,21 +8,31 @@
 #define STRINGIFY(x) #x
 #define TO_STRING(x) STRINGIFY(x)
 
+// Target pixels to process at a time per AIE kern
+#define BLOCK_SIZE 16
+
+// Number of pulses to process
+//#define PULSES 602
+//#define PULSES 100
+#define PULSES 5
+
 // Number of range compression samples. This will also be the number of columns
 // of the output image.
-#define RC_SAMPLES 512
+//#define RC_SAMPLES 512
+#define RC_SAMPLES 64
 
-// Number of pulses to process. This will also be the number of rows of the
+// Number of azimuth samples. This will also be the number of rows of the
 // output image.
-#define PULSES 602
-//#define PULSES 448
+#define AZ_SAMPLES PULSES
 
 // Number of AIE switches to use
-#define AIE_SWITCHES 7
+#define AIE_SWITCHES 1
+//#define AIE_SWITCHES 1
 
 // Number of image reconstruction solvers per switch. It must be a power of 2
 // and the max number of image solvers on a switch is 32
-#define IMG_SOLVERS_PER_SWITCH 32
+//#define IMG_SOLVERS_PER_SWITCH 32
+#define IMG_SOLVERS_PER_SWITCH 4
 
 // Number of image reconstruction solvers (must be pwr of 2)
 #define IMG_SOLVERS (AIE_SWITCHES*IMG_SOLVERS_PER_SWITCH)

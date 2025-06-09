@@ -42,8 +42,8 @@ SARBackproject::SARBackproject(const char* xclbin_filename,
 //, m_z_ant_pos_array(m_z_ant_pos_buffer.map<float*>())
 //, m_ref_range_buffer(m_device, PULSES*sizeof(float), xrt::bo::flags::normal, 0)
 //, m_ref_range_array(m_ref_range_buffer.map<float*>())
-, m_xyz_px_buffer(m_device, PULSES*RC_SAMPLES*sizeof(float)*3, xrt::bo::flags::normal, 0)
-, m_xyz_px_array(m_xyz_px_buffer.map<float*>())
+//, m_xyz_px_buffer(m_device, PULSES*RC_SAMPLES*sizeof(float)*3, xrt::bo::flags::normal, 0)
+//, m_xyz_px_array(m_xyz_px_buffer.map<float*>())
 , m_rc_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
 , m_rc_array(m_rc_buffer.map<cfloat*>())
 //, m_img_buffer(m_device, PULSES*RC_SAMPLES*sizeof(cfloat), xrt::bo::flags::normal, 0)
@@ -63,17 +63,32 @@ SARBackproject::SARBackproject(const char* xclbin_filename,
     // for now since there are not plans to instantiate the design more than
     // once, but would be nice if this still worked for future proofing
     for(int i = 0; i < this->m_instances; i++) {
+        std::string dma_stride_kernel_str = "dma_stride_controller:{dma_stride_controller_" + std::to_string(i) + "}";
+        m_dma_stride_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_stride_kernel_str));
+        m_dma_stride_run_hdls.push_back(xrt::run(m_dma_stride_kernels[i]));
+
         for(int sw_id = 0; sw_id < AIE_SWITCHES; sw_id++) {
             std::string dma_pkt_router_kernel_str = "dma_pkt_router:{dma_pkt_router_" + std::to_string(sw_id) + "}";
             m_dma_pkt_router_kernels.push_back(xrt::kernel(m_device, m_uuid, dma_pkt_router_kernel_str));
             m_dma_pkt_router_run_hdls.push_back(xrt::run(m_dma_pkt_router_kernels[sw_id]));
         }
         
+        // We can take better advantage of the space in the DDR by having X and
+        // Y components take up the lower 32 bits and upper 32 bits of a 64 bit
+        // memory space, then have the Z component take up the next 64 bit
+        // memory space by writing to the lower 32 bits (while padding the
+        // higher 32 bits). Therefore, we only need
+        // PULSES*AZ_SAMPLES*RC_SAMPLES*2 UINT64 memory spaces instead of
+        // PULSES*AZ_SAMPLES*RC_SAMPLES*3.
+        //printf("uint64_t size: %d\n", sizeof(uint64_t));
+        m_xyz_px_buffers.push_back(xrt::bo(m_device, PULSES*AZ_SAMPLES*RC_SAMPLES*2*sizeof(uint64_t), m_dma_stride_kernels[0].group_id(0)));
+        m_xyz_px_arrays.push_back(m_xyz_px_buffers[i].map<uint64_t*>());
+        
         // All kernel instances map to the same DDR memory bank. This means
         // kernel1.group_id(1) should return the same bank ID as
         // kernel0.group_id(1). Therefore, it doesnt matter which instances
         // group_id is used, the result is the same memory bank.
-        m_img_buffers.push_back(xrt::bo(m_device, PULSES*RC_SAMPLES*8, m_dma_pkt_router_kernels[0].group_id(1)));
+        m_img_buffers.push_back(xrt::bo(m_device, AZ_SAMPLES*RC_SAMPLES*8, m_dma_pkt_router_kernels[0].group_id(1)));
         m_img_arrays.push_back(m_img_buffers[i].map<cfloat*>());
 
         std::string bpGraph_str = "bpGraph[" + std::to_string(i) + "]";
@@ -483,22 +498,80 @@ void SARBackproject::genTargetPixels() {
     //        //printf("pixels[%d] = {%f, %f}\n", idx, this->m_xy_px_array[idx].real, this->m_xy_px_array[idx].imag);
     //    }
     //}
-    int idx = 0;
+
+    // Pack each pair of 32-bit floats into one 64-bit word
+    int word_idx = 0;
     for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
-        for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+        for(int az_idx = 0; az_idx < AZ_SAMPLES; az_idx++) {
+            for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+                
+                // X target pixels
+                float x = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
 
-            // X target pixels
-            this->m_xyz_px_array[idx++] = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
+                // Y target pixels
+                float y = az_res*az_idx - half_az_width;
 
-            // Y target pixels
-            this->m_xyz_px_array[idx++] = az_res*pulse_idx - half_az_width;
+                // Z target pixels
+                float z = 0.0;
 
-            // Z target pixels
-            this->m_xyz_px_array[idx++] = 0.0;
+                // **** PACK X AND Y INTO WORD0 **** //
+                uint32_t bits_x, bits_y, bits_z;
+                memcpy(&bits_x, &x, sizeof(float));
+                memcpy(&bits_y, &y, sizeof(float));
 
-            //printf("pixels[%d] = {%f, %f, %f}\n", (idx-3)/3, this->m_xyz_px_array[idx-3], this->m_xyz_px_array[idx-2], this->m_xyz_px_array[idx-1]);
+                // Lower 32 bits = x | Higher 32 bits = y
+                uint64_t w0 = ((uint64_t)bits_y << 32) | bits_x;
+                m_xyz_px_arrays[0][word_idx++] = w0;
+
+                // **** PACK Z AND 0 INTO WORD1 **** //
+                memcpy(&bits_z, &z, sizeof(float));
+
+                // Lower 32 bits = z | Higher 32 bits = 0
+                uint64_t w1 = bits_z;
+                m_xyz_px_arrays[0][word_idx++] = w1;
+            }
         }
     }
+
+    m_xyz_px_buffers[0].sync(XCL_BO_SYNC_BO_TO_DEVICE, PULSES*AZ_SAMPLES*RC_SAMPLES*2*sizeof(uint64_t), 0);
+
+    // Pass xrt::bo pointer to PL kernel's first arg (ddr_mem) so it can read the pixel data from it
+    m_dma_stride_run_hdls[0].set_arg(0, m_xyz_px_buffers[0]);
+
+    // Launch the DMA Stride Controller PL kernel
+    m_dma_stride_run_hdls[0].start();
+
+    // Debug print what is in m_xyz_px_arrays
+    //for (int i = 0; i < PULSES*AZ_SAMPLES*RC_SAMPLES*2; i++) {
+    //    uint64_t word = m_xyz_px_arrays[0][i];
+    //    uint32_t lo = (uint32_t)(word & 0xFFFFFFFFULL);
+    //    uint32_t hi = (uint32_t)((word >> 32) & 0xFFFFFFFFULL);
+
+    //    float f_lo, f_hi;
+    //    memcpy(&f_lo, &lo, sizeof(float));
+    //    memcpy(&f_hi, &hi, sizeof(float));
+
+    //    printf("m_xyz_px_arrays[0][%zu] = {%.6f, %.6f}\n", i, f_lo, f_hi);
+    //}
+
+    //for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    //    for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
+
+    //        // X target pixels
+    //        m_xyz_px_arrays[0][idx++] = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
+
+    //        // Y target pixels
+    //        m_xyz_px_arrays[0][idx++] = az_res*pulse_idx - half_az_width;
+
+    //        // Z target pixels
+    //        m_xyz_px_arrays[0][idx++] = 0.0;
+
+    //        //printf("pixels[%d] = {%f, %f, %f}\n", (idx-3)/3, 
+    //        //        this->m_xyz_px_arrays[0][idx-3], 
+    //        //        this->m_xyz_px_arrays[0][idx-2], 
+    //        //        this->m_xyz_px_arrays[0][idx-1]);
+    //    }
+    //}
 }
 
 void SARBackproject::runGraphs() {
@@ -513,18 +586,28 @@ void SARBackproject::runGraphs() {
 }
 
 void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* buffers_rc_in, 
-        xrt::aie::bo* buffers_xyz_px_in, xrt::bo* buffers_img_out, int num_of_buffers) {
+        xrt::bo* buffers_img_out, int num_of_buffers) {
     
     std::vector<xrt::bo::async_handle> buff_async_hdls;
     
     // Number of target pixels for each px_demux_kern to process
-    int px_per_demux_kern = (PULSES*RC_SAMPLES)/AIE_SWITCHES;
+    //int px_per_demux_kern = (PULSES*RC_SAMPLES)/AIE_SWITCHES;
     //int px_per_ai = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
 
     //int32 rtp_valid_low_bound_result[4] = {};
     //int32 rtp_valid_high_bound_result[4] = {};
+    
 
     for(int buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+        //buffers_xyz_px_in[buff_idx].sync(XCL_BO_SYNC_BO_TO_DEVICE, PULSES*AZ_SAMPLES*RC_SAMPLES*2*sizeof(uint64_t), 0);
+
+        //// Pass xrt::bo pointer to PL kernel's first arg (ddr_mem) so it can read the pixel data from it
+        //m_dma_stride_run_hdls[buff_idx].set_arg(0, buffers_xyz_px_in[buff_idx]);
+
+        //// Launch the DMA Stride Controller PL kernel
+        //m_dma_stride_run_hdls[buff_idx].start();
+
+
         // Slowtime and range compressed data going to data broadcaster splicer
         buffers_broadcast_data_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].gmio_in_st", 
                                                   XCL_BO_SYNC_BO_GMIO_TO_AIE, 
@@ -537,14 +620,15 @@ void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* b
                                           (pulse_idx*RC_SAMPLES)*sizeof(cfloat));
             
 
-            for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
-                buffers_xyz_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].bpCluster[" + std::to_string(sw_id) + "].gmio_in_xyz_px", 
-                                                  XCL_BO_SYNC_BO_GMIO_TO_AIE, 
-                                                  px_per_demux_kern*sizeof(float)*3, 
-                                                  sw_id*px_per_demux_kern*sizeof(float)*3);
-            }
+            //for (int sw_id=0; sw_id<AIE_SWITCHES; sw_id++) {
+            //    buffers_xyz_px_in[buff_idx].async("bpGraph[" + std::to_string(buff_idx) + "].bpCluster[" + std::to_string(sw_id) + "].gmio_in_xyz_px", 
+            //                                      XCL_BO_SYNC_BO_GMIO_TO_AIE, 
+            //                                      px_per_demux_kern*sizeof(float)*3, 
+            //                                      sw_id*px_per_demux_kern*sizeof(float)*3);
+            //}
 
             for (int kern_id = 0; kern_id < IMG_SOLVERS; kern_id++) {
+                //printf("pulse_idx=%d | kern_id=%d\n", pulse_idx, kern_id);
                 // Dump image if on last pulse, otherwise keep focusing the image
                 if (pulse_idx == PULSES-1) {
                     this->m_bp_graph_hdls[buff_idx].update("bpGraph[" + std::to_string(buff_idx) + "].rtp_dump_img_in[" + std::to_string(kern_id) + "]", 1);
@@ -666,7 +750,7 @@ void SARBackproject::bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* b
         //}
 
         // Copy results back to host from PL kernel
-        buffers_img_out[buff_idx].sync(XCL_BO_SYNC_BO_FROM_DEVICE, PULSES*RC_SAMPLES*sizeof(cfloat), 0);
+        buffers_img_out[buff_idx].sync(XCL_BO_SYNC_BO_FROM_DEVICE, AZ_SAMPLES*RC_SAMPLES*sizeof(cfloat), 0);
     }
 
 

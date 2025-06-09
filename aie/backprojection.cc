@@ -17,23 +17,75 @@ void px_demux_kern(input_stream<float>* __restrict px_xyz_in,
     int pkt_type = 0;
     
     // Pixel components per AI reconstruction kernel
-    int px_components_per_ai = ((PULSES*RC_SAMPLES)/IMG_SOLVERS)*3;
+    //int px_components_per_ai = ((PULSES*RC_SAMPLES)/IMG_SOLVERS)*3;
 
-    for (int switch_idx=0; switch_idx<IMG_SOLVERS_PER_SWITCH; switch_idx++) {
-        // Get packet ID for routing from specific index. Packet ID is automatically
-        // given at compile time and must be fetched indirectly via an index.
-        uint32 pkt_id = getPacketid(px_xyz_out, switch_idx);
-        writeHeader(px_xyz_out, pkt_type, pkt_id);
+    //for (int switch_idx=0; switch_idx<IMG_SOLVERS_PER_SWITCH; switch_idx++) chess_prepare_for_pipelining {
+    //    // Get packet ID for routing from specific index. Packet ID is automatically
+    //    // given at compile time and must be fetched indirectly via an index.
+    //    uint32 pkt_id = getPacketid(px_xyz_out, switch_idx);
+    //    writeHeader(px_xyz_out, pkt_type, pkt_id);
 
-        for (int px_idx=0; px_idx<px_components_per_ai; px_idx++) {
-            float px_xyz_val = readincr(px_xyz_in);
-        
-            //printf("%d: switch_idx: %d | pkt_id: %d | px_xyz_val: %f | tlast: %d\n", 
-            //        px_idx, switch_idx, pkt_id, px_xyz_val, px_idx==(16*3)-1);
+    //    for (int px_idx=0; px_idx<px_components_per_ai; px_idx++) chess_prepare_for_pipelining {
+    //        float px_xyz_val = readincr(px_xyz_in);
+    //    
+    //        //printf("%d: switch_idx: %d | pkt_id: %d | px_xyz_val: %f | tlast: %d\n", 
+    //        //        px_idx, switch_idx, pkt_id, px_xyz_val, px_idx==(16*3)-1);
 
-            writeincr(px_xyz_out, px_xyz_val, px_idx==(px_components_per_ai-1));
+    //        writeincr(px_xyz_out, px_xyz_val, px_idx==(px_components_per_ai-1));
+    //    }
+    //}
+    
+
+    // Pixel components per AI reconstruction kernel
+    //int px_components_per_ai = ((PULSES*RC_SAMPLES)/IMG_SOLVERS)*3;
+    
+    aie::vector<float,4> px_xyz_vec;
+
+    for (int pulse_idx=0; pulse_idx<PULSES; pulse_idx++) chess_prepare_for_pipelining {
+        for (int switch_idx=0; switch_idx<IMG_SOLVERS_PER_SWITCH; switch_idx++) chess_prepare_for_pipelining {
+
+            // Get packet ID for routing from specific index. Packet ID is automatically
+            // given at compile time and must be fetched indirectly via an index.
+            uint32 pkt_id = getPacketid(px_xyz_out, switch_idx);
+
+            writeHeader(px_xyz_out, pkt_type, pkt_id);
+
+            for (int i=0; i<BLOCK_SIZE; i++) chess_prepare_for_pipelining {
+                px_xyz_vec = readincr_v<4>(px_xyz_in);
+            
+                //printf("%d: %d: switch_idx: %d | pkt_id: %d | px_xyz_val: %f | tlast: %d\n", i,
+                //        px_idx, switch_idx, pkt_id, px_xyz_val, (16*4)-1);
+
+                writeincr(px_xyz_out, px_xyz_vec.get(0));
+                writeincr(px_xyz_out, px_xyz_vec.get(1));
+                writeincr(px_xyz_out, px_xyz_vec.get(2));
+                writeincr(px_xyz_out, px_xyz_vec.get(3), i==(BLOCK_SIZE-1));
+            }
         }
     }
+
+    //// Pixel components per AI reconstruction kernel
+    //int px_components_per_ai = ((PULSES*RC_SAMPLES)/IMG_SOLVERS)*3;
+
+    //for (int px_idx=0; px_idx<px_components_per_ai/16; px_idx++) chess_prepare_for_pipelining {
+    //    for (int switch_idx=0; switch_idx<IMG_SOLVERS_PER_SWITCH; switch_idx++) chess_prepare_for_pipelining {
+
+    //        // Get packet ID for routing from specific index. Packet ID is automatically
+    //        // given at compile time and must be fetched indirectly via an index.
+    //        uint32 pkt_id = getPacketid(px_xyz_out, switch_idx);
+
+    //        writeHeader(px_xyz_out, pkt_type, pkt_id);
+
+    //        for (int i=0; i<16*4; i++) chess_prepare_for_pipelining {
+    //            float px_xyz_val = readincr(px_xyz_in);
+    //        
+    //            //printf("%d: %d: switch_idx: %d | pkt_id: %d | px_xyz_val: %f | tlast: %d\n", i,
+    //            //        px_idx, switch_idx, pkt_id, px_xyz_val, (16*4)-1);
+
+    //            writeincr(px_xyz_out, px_xyz_val, i==(16*4)-1);
+    //        }
+    //    }
+    //}
 }
 
 void data_broadcast_kern(input_stream<float>* __restrict slowtime_in,
@@ -62,7 +114,7 @@ ImgReconstruct::ImgReconstruct(int id)
 {}
 
 void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<BC_ELEMENTS>>& __restrict slowtime_in,
-                                          input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                                          input_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
                                           input_pktstream *px_xyz_in,
                                           output_pktstream *img_out,
                                           int rtp_dump_img_in) {
@@ -70,32 +122,32 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<BC_ELEMENT
     //printf("%d: rtp_rc_idx_offset_in: %d\n", m_id, rtp_rc_idx_offset_in);
 
     // Lock range compressed async buffer
-    rc_in.acquire();
+    //rc_in.acquire();
     //img_out.acquire();
     
-    const int SAMPLES = (PULSES*RC_SAMPLES)/IMG_SOLVERS;
+    const int SAMPLES = (AZ_SAMPLES*RC_SAMPLES)/IMG_SOLVERS;
 
     // Used for buffering X, Y, and Z target pixels from input
     // NOTE: Target pixels are stored as ints since thats the datatype associated
     // with pktswitch streams
-    alignas(aie::vector_decl_align) float x_trgt_pxls[SAMPLES];
-    alignas(aie::vector_decl_align) float y_trgt_pxls[SAMPLES];
-    alignas(aie::vector_decl_align) float z_trgt_pxls[SAMPLES];
+    //alignas(aie::vector_decl_align) float x_trgt_pxls[SAMPLES];
+    //alignas(aie::vector_decl_align) float y_trgt_pxls[SAMPLES];
+    //alignas(aie::vector_decl_align) float z_trgt_pxls[SAMPLES];
 
-    // Extract target pixels into buffer for prcessing later in this function
-    uint32 header = readincr(px_xyz_in);
-    //uint32 id = header & 0x1F;
-    //uint32 pkt_type = (header & 0x7000) >> 12;
-    //printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
-    for(int px_idx=0; px_idx < SAMPLES; px_idx++) chess_prepare_for_pipelining {
-        int raw_x = readincr(px_xyz_in);
-        int raw_y = readincr(px_xyz_in);
-        int raw_z = readincr(px_xyz_in);
+    //// Extract target pixels into buffer for prcessing later in this function
+    //uint32 header = readincr(px_xyz_in);
+    ////uint32 id = header & 0x1F;
+    ////uint32 pkt_type = (header & 0x7000) >> 12;
+    ////printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
+    //for(int px_idx=0; px_idx < SAMPLES; px_idx++) chess_prepare_for_pipelining {
+    //    int raw_x = readincr(px_xyz_in);
+    //    int raw_y = readincr(px_xyz_in);
+    //    int raw_z = readincr(px_xyz_in);
 
-        x_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_x);
-        y_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_y);
-        z_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_z);
-    }
+    //    x_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_x);
+    //    y_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_y);
+    //    z_trgt_pxls[px_idx] = *reinterpret_cast<float*>(&raw_z);
+    //}
     
     // Initalize m_img (don't need to do this if keeping track of valid bounds via RTP params)
     //auto zero_init_vec = aie::zeros<cfloat, 16>();
@@ -132,13 +184,27 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<BC_ELEMENT
     aie::vector<float,16> x_pxls_vec;
     aie::vector<float,16> y_pxls_vec;
     aie::vector<float,16> z_pxls_vec;
+
+    int raw_x, raw_y, raw_z;
     
     for(int px_seg_idx=0; px_seg_idx < SAMPLES/16; px_seg_idx++) chess_prepare_for_pipelining {
 
-        // Extract X, Y and Z target pixel buffers into their respective pixel vectors
-        x_pxls_vec.load(x_trgt_pxls + px_seg_idx*16);
-        y_pxls_vec.load(y_trgt_pxls + px_seg_idx*16);
-        z_pxls_vec.load(z_trgt_pxls + px_seg_idx*16);
+        //// Extract X, Y and Z target pixel buffers into their respective pixel vectors
+        //x_pxls_vec.load(x_trgt_pxls + px_seg_idx*16);
+        //y_pxls_vec.load(y_trgt_pxls + px_seg_idx*16);
+        //z_pxls_vec.load(z_trgt_pxls + px_seg_idx*16);
+
+        uint32 header = readincr(px_xyz_in);
+        //printf("%d IMR_RECON: header: 0x%08x | id: %u | pkt_type: %u\n", m_id, header, id, pkt_type);
+        for(int i=0; i<16; i++) chess_prepare_for_pipelining {
+            raw_x = readincr(px_xyz_in);
+            raw_y = readincr(px_xyz_in);
+            raw_z = readincr(px_xyz_in);
+            readincr(px_xyz_in); // zero pad
+            x_pxls_vec.set(*reinterpret_cast<float*>(&raw_x), i);
+            y_pxls_vec.set(*reinterpret_cast<float*>(&raw_y), i);
+            z_pxls_vec.set(*reinterpret_cast<float*>(&raw_z), i);
+        }
 
         //uint32 header = readincr(px_xyz_in);
         //uint32 id = header & 0x1F;
@@ -508,7 +574,7 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<BC_ELEMENT
     }
 
     // Release buffers to show this kernel is finished working on them
-    rc_in.release();
+    //rc_in.release();
     //img_out.release();
 }
 

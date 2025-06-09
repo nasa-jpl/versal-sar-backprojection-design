@@ -59,8 +59,8 @@ class SARBackproject {
         //float* m_z_ant_pos_array;
         //xrt::aie::bo m_ref_range_buffer;
         //float* m_ref_range_array;
-        xrt::aie::bo m_xyz_px_buffer;
-        float* m_xyz_px_array;
+        //xrt::aie::bo m_xyz_px_buffer;
+        //float* m_xyz_px_array;
         xrt::aie::bo m_rc_buffer;
         cfloat* m_rc_array;
         //xrt::aie::bo m_img_buffer;
@@ -99,7 +99,7 @@ class SARBackproject {
         //        xrt::aie::bo* buffers_rc_in, xrt::aie::bo* buffers_xyz_px_in, 
         //        xrt::bo* buffers_img_out, int num_of_buffers);
         void bp(xrt::aie::bo* buffers_broadcast_data_in, xrt::aie::bo* buffers_rc_in, 
-                xrt::aie::bo* buffers_xyz_px_in, xrt::bo* buffers_img_out, int num_of_buffers);
+                xrt::bo* buffers_img_out, int num_of_buffers);
         //void fft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         //void ifft(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
         //void cplxConj(xrt::aie::bo* buffers_in, xrt::aie::bo* buffers_out, int num_of_buffers);
@@ -110,6 +110,12 @@ class SARBackproject {
         // Block size of images
         //static constexpr int BLOCK_SIZE_ENTRIES = MAT_ROWS * MAT_COLS;
         //static constexpr int BLOCK_SIZE_BYTES = BLOCK_SIZE_ENTRIES * sizeof(cfloat);
+
+        // PL dma_stride kernel handlers and buffers 
+        std::vector<xrt::kernel> m_dma_stride_kernels;
+        std::vector<xrt::run> m_dma_stride_run_hdls;
+        std::vector<xrt::bo> m_xyz_px_buffers;
+        std::vector<uint64_t*> m_xyz_px_arrays;
 
         // PL dma_pkt_router kernel handlers and buffers 
         std::vector<xrt::kernel> m_dma_pkt_router_kernels;

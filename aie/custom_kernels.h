@@ -27,7 +27,7 @@ class ImgReconstruct
     public:
         ImgReconstruct(int id);
         void img_reconstruct_kern(input_buffer<float, extents<BC_ELEMENTS>>& __restrict slowtime_in,
-                                  input_async_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
+                                  input_buffer<cfloat, extents<RC_SAMPLES>>& __restrict rc_in,
                                   input_pktstream *px_xyz_in,
                                   output_pktstream *img_out,
                                   int rtp_dump_img_in);
