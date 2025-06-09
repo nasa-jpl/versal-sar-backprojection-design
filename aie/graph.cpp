@@ -154,23 +154,74 @@ int main(int argc, char ** argv) {
         half_az_width = az_width/2.0;
     }
 
-    float* xyz_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float)*3);
     int idx = 0;
+    float* tmp_px_array = (float*) malloc(PULSES*RC_SAMPLES*sizeof(float)*3);
     for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
         for(int rng_idx = 0; rng_idx < RC_SAMPLES; rng_idx++) {
             
             // X target pixels
-            xyz_px_array[idx++] = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
+            tmp_px_array[idx++] = (rng_idx-HALF_RANGE_SAMPLES)*RANGE_RES;
 
             // Y target pixels
-            xyz_px_array[idx++] = az_res*pulse_idx - half_az_width;
+            tmp_px_array[idx++] = az_res*pulse_idx - half_az_width;
 
             // Z target pixels
-            xyz_px_array[idx++] = 0.0;
+            tmp_px_array[idx++] = 0.0;
 
-            printf("xyz_px_array[%d] = {%f, %f, %f}\n", (idx-3)/3, xyz_px_array[idx-3], xyz_px_array[idx-2], xyz_px_array[idx-1]);
+            printf("tmp_px_array[%d] = {%f, %f, %f}\n", (idx-3)/3, tmp_px_array[idx-3], tmp_px_array[idx-2], tmp_px_array[idx-1]);
         }
     }
+
+    // Number of target pixels in a single pulse
+    const int px_per_pulse = AZ_SAMPLES * RC_SAMPLES;
+
+    // Number of target pixels destined for each switch per pulse
+    const int px_per_switch = px_per_pulse/AIE_SWITCHES;
+
+    // Number of target pixels destined for each AIE kernel per pulse
+    const int px_per_kern = px_per_pulse/IMG_SOLVERS;
+    
+    float* xyz_px_array = (float*) GMIO::malloc(PULSES*RC_SAMPLES*sizeof(float)*3);
+    int idx_px_component;
+    int new_idx = 0;
+
+    // Iterate over every pulse
+    //for(int pulse_idx = 0; pulse_idx < PULSES; pulse_idx++) {
+    for(int pulse_idx = 0; pulse_idx < 1; pulse_idx++) {
+
+        // Iterate over each switch
+        for(int sw_num = 0; sw_num < AIE_SWITCHES; sw_num++) {
+
+            // Starting pixel index on each pulse
+            int start_px_idx_per_pulse = sw_num*px_per_switch + pulse_idx*px_per_pulse;
+
+            // Stride 16 pixels
+            for(int base_px = start_px_idx_per_pulse; base_px < px_per_kern + start_px_idx_per_pulse; base_px += 16) {
+
+                // Strides the number of pixels that will be sent to an AIE kernel
+                for(int start_px = base_px; start_px < px_per_switch + start_px_idx_per_pulse; start_px += px_per_kern) {
+
+                    // Extract 16 pixels
+                    for(int idx_px = start_px; idx_px < start_px + 16; idx_px++) {
+
+                        // Because idx_128b is a 128 bit sample index representing
+                        // a pixel, but ddr_mem is 64bit, we need to multiply by 2
+                        idx_px_component = idx_px*3;
+
+                        xyz_px_array[new_idx++] = tmp_px_array[idx_px_component];
+                        xyz_px_array[new_idx++] = tmp_px_array[idx_px_component+1];
+                        xyz_px_array[new_idx++] = tmp_px_array[idx_px_component+2];
+
+                        printf("orig_idx: %d | xyz_px_array[%d] = {%f, %f, %f}\n", 
+                                idx_px, new_idx-3, xyz_px_array[new_idx-3], xyz_px_array[new_idx-2], xyz_px_array[new_idx-1]);
+                        
+                    }
+                }
+            }
+        }
+    }
+    free(tmp_px_array);
+
 
     // Number of iteration for the AIE graphs to run
     for (int inst = 0; inst < INSTANCES; inst++) {

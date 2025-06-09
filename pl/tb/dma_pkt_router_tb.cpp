@@ -111,8 +111,8 @@ int main() {
     }
 
     // Open a file for writing. Current working dir inside 
-    // versal-design-build/design/pl/tb/dma_pkt_router_testbench/solution1/csim/build
-    FILE *img_fp = fopen("../../../../output_img.csv", "w");
+    // versal-design-build/build/hw/plsim/dma_pkt_router_testbench/solution1/csim/build
+    FILE *img_fp = fopen("../../../../plsimulator_output/output_img.csv", "w");
     if (img_fp == NULL) {
         perror("Error opening output_img.csv file");
         return 1;
@@ -136,7 +136,7 @@ int main() {
                                          (uint32_t)(ddr_mem[i] & 0xFFFFFFFF),
                                          (uint32_t)(ddr_mem[i]>>32));
 
-    printf("\nSuccessfully wrote output image to versal-design-build/plsim/output_img.csv\n\n");
+    printf("\nSuccessfully wrote output image to versal-design-build/build/plsim/plsimulator_output/output_img.csv\n\n");
 
     free(ddr_mem);
 
