@@ -13,13 +13,11 @@
 
 // Number of pulses to process
 //#define PULSES 602
-//#define PULSES 100
-#define PULSES 5
+#define PULSES 100
 
 // Number of range compression samples. This will also be the number of columns
 // of the output image.
-//#define RC_SAMPLES 512
-#define RC_SAMPLES 64
+#define RC_SAMPLES 512
 
 // Number of azimuth samples. This will also be the number of rows of the
 // output image.
@@ -27,12 +25,10 @@
 
 // Number of AIE switches to use
 #define AIE_SWITCHES 1
-//#define AIE_SWITCHES 1
 
 // Number of image reconstruction solvers per switch. It must be a power of 2
 // and the max number of image solvers on a switch is 32
-//#define IMG_SOLVERS_PER_SWITCH 32
-#define IMG_SOLVERS_PER_SWITCH 4
+#define IMG_SOLVERS_PER_SWITCH 32
 
 // Number of image reconstruction solvers (must be pwr of 2)
 #define IMG_SOLVERS (AIE_SWITCHES*IMG_SOLVERS_PER_SWITCH)
