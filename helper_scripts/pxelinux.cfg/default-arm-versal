@@ -1,0 +1,4 @@
+LABEL Linux
+KERNEL Image
+FDT system.dtb
+APPEND console=ttyUSB1 earlycon=pl011,mmio32,0xFF000000,115200n8 clk_ignore_unused cma=600MB root=/dev/nfs rootfstype=nfs nfsroot=192.168.10.1:/nfs/versal/rootfs,tcp,nfsvers=3 ip=192.168.10.2:::255.255.255.0:versal:eth0:bootp rw
