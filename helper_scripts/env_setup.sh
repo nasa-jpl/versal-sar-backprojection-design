@@ -4,7 +4,7 @@
 # Date: 5/21/2024
 # Desc: Source this script to allow the makefiles to build the system properly
 
-WORKSPACE_PATH=$(dirname $(dirname $(dirname $(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd))))
+WORKSPACE_PATH=$(dirname $(dirname $(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)))
 
 # =======================================================
 # Set Platform ,Vitis Versal Image, SDK, and PDM repos

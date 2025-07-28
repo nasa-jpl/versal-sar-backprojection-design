@@ -14,11 +14,11 @@
 
 // Number of pulses to process. This will also be the number of rows of the
 // output image.
-#define PULSES 602
+#define PULSES 100
 //#define PULSES 448
 
 // Number of AIE switches to use
-#define AIE_SWITCHES 7
+#define AIE_SWITCHES 1
 
 // Number of image reconstruction solvers per switch. It must be a power of 2
 // and the max number of image solvers on a switch is 32
