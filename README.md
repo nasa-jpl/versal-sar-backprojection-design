@@ -5,7 +5,7 @@
 **NOTE: This repository should not be cloned directly! Instead, the following
 manifest repo should be used to collect all the necessary repos required for 
 building this design: https://github.jpl.nasa.gov/atowens/versal-manifest. Read 
-the README.md in that repo for further instructions.**
+the README.md in that repo first if you want to build this design for the Versal.**
 
 This repo only contains the source code for implementing backprojection onto 
 the AMD Versal ACAP and does not contain various helper scripts or makefiles
