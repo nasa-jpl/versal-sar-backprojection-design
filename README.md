@@ -36,9 +36,9 @@ need to download and install a new program that's separate from Git.
 1. Install git-lfs via your package manager. Ex: `sudo apt install git-lfs`. 
 Alternatively, you can navigate to [git-lfs.com](https://git-lfs.com/) and 
 click Download.
-2. `cd versal-design-build/design`
+2. `cd <this repo>`
 3. `git lfs install`
-
+4. `git lfs pull`
 
 ### Helper Scripts
 
