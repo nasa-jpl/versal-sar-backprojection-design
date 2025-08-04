@@ -30,7 +30,7 @@ doc                           | Design documentation
 
 ### Git LFS Installation
 
-This repo uses Git LFS for it's documentation. In order to use Git LFS, you'll
+This repo uses Git LFS for it's data input files. In order to use Git LFS, you'll
 need to download and install a new program that's separate from Git.
 
 1. Install git-lfs via your package manager. Ex: `sudo apt install git-lfs`. 
