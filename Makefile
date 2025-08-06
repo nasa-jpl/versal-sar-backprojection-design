@@ -227,12 +227,13 @@ ${PL_BUILD_DIR}/dma_pkt_router.xo: design/pl/dma_pkt_router.cpp design/pl/dma_pk
 	echo -e "\n[clock]" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	echo -e "default_freqhz=312500000\n" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	echo "[connectivity]" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	echo -e "\n### DMA PACKET ROUTER CONTROLLER ###" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+    routers=$$(printf "dma_pkt_router_%s," $$(seq 0 $$((AIE_SWITCHES - 1)))); \
+	routers=$${routers%,}; \
+	echo "nk=dma_pkt_router:$$AIE_SWITCHES:$$routers" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	echo -e "\n# Connect AIE graph's plio_pkt_rtr_out_0_# to PL kernel's pl_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
-		echo "nk=dma_pkt_router:$$((AIE_SWITCHES - 1)):dma_pkt_router_$$i" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
-	done; \
-	echo -e "\n# Connect AIE graph's plio_pkt_rtr_out_0_# to PL kernel's aie_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
-	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
-		echo "stream_connect=ai_engine_0.plio_pkt_rtr_out_0_$$i:dma_pkt_router_$$i.aie_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+		echo "stream_connect=ai_engine_0.plio_pkt_rtr_out_0_$$i:dma_pkt_router_$$i.pl_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	done; \
 	echo -e "\n# System port connection linking dma_pkt_router_0 instance to mem resource" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
