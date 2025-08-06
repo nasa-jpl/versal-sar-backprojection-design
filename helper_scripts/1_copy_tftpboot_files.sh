@@ -14,7 +14,7 @@ ls -l ${TFTPBOOT_PATH}
 
 rm -r ${TFTPBOOT_PATH}/*
 
-cp -a ${SRC_PATH}/Image* ${SRC_PATH}/devicetree ${WORKSPACE_PATH}/versal-design-build/helper_scripts/pxelinux.cfg/ ${SRC_PATH}/system.dtb ${TFTPBOOT_PATH}
+cp -a ${SRC_PATH}/Image* ${SRC_PATH}/devicetree ${WORKSPACE_PATH}/versal-sar-backprojection-design/helper_scripts/pxelinux.cfg/ ${SRC_PATH}/system.dtb ${TFTPBOOT_PATH}
 
 chmod -R 777 ${TFTPBOOT_PATH}/*
 
