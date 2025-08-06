@@ -3,7 +3,7 @@
 # Desc: Helper script to create custom dts for Versal from xsa
 #
 # You can run this tcl script by doing the following in 
-# versal-design-build/helper_scripts:
+# versal-sar-backprojection-design/helper_scripts:
 # source env_setup.sh && xsct create_dtc.tcl
 #
 # After running the tcl script, you will see the dts located here:
