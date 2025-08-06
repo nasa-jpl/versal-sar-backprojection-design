@@ -230,7 +230,7 @@ ${PL_BUILD_DIR}/dma_pkt_router.xo: design/pl/dma_pkt_router.cpp design/pl/dma_pk
 	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
 		echo "nk=dma_pkt_router:$$((AIE_SWITCHES - 1)):dma_pkt_router_$$i" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	done; \
-	echo -e "\n# Connect AIE graph's plio_pkt_rtr_out_0_0 to PL kernel's aie_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	echo -e "\n# Connect AIE graph's plio_pkt_rtr_out_0_# to PL kernel's aie_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
 		echo "stream_connect=ai_engine_0.plio_pkt_rtr_out_0_$$i:dma_pkt_router_$$i.aie_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
 	done; \
