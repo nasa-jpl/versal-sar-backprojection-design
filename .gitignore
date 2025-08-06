@@ -1,4 +1,5 @@
 build
+design/system_cfgs/system.cfg
 **.log
 **/.*.sw*
 **/core.*

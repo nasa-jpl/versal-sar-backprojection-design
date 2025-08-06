@@ -222,6 +222,22 @@ metrics: ${XSA_BUILD_DIR}/${XSA}
 
 # Building DMA Packet Router PL kernel
 ${PL_BUILD_DIR}/dma_pkt_router.xo: design/pl/dma_pkt_router.cpp design/pl/dma_pkt_router.h design/pl/pkt_router_config.cfg ${PROJECT_DIR}/design/common.h
+	@AIE_SWITCHES=$$(grep '^#define AIE_SWITCHES' ${PROJECT_DIR}/design/common.h | awk '{print $$3}'); \
+	echo "# THIS FILE IS AUTO-GENERATED FROM THE MAKEFILE" > ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	echo -e "\n[clock]" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	echo -e "default_freqhz=312500000\n" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	echo "[connectivity]" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
+		echo "nk=dma_pkt_router:$$((AIE_SWITCHES - 1)):dma_pkt_router_$$i" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	done; \
+	echo -e "\n# Connect AIE graph's plio_pkt_rtr_out_0_0 to PL kernel's aie_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
+		echo "stream_connect=ai_engine_0.plio_pkt_rtr_out_0_$$i:dma_pkt_router_$$i.aie_stream_in" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	done; \
+	echo -e "\n# System port connection linking dma_pkt_router_0 instance to mem resource" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	for i in $$(seq 0 $$((AIE_SWITCHES - 1))); do \
+		echo "sp=dma_pkt_router_$$i.ddr_mem:DDR" >> ${PROJECT_DIR}/design/system_cfgs/system.cfg; \
+	done; \
 	mkdir -p ${PL_BUILD_DIR}; \
 	cd ${PL_BUILD_DIR}; \
 	v++ -c --mode hls --platform=${PLATFORM} -t ${PL_TARGET} \
