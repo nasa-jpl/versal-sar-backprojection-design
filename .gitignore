@@ -1,5 +1,6 @@
 build
 design/system_cfgs/system.cfg
+output_img.csv
 **.log
 **/.*.sw*
 **/core.*
