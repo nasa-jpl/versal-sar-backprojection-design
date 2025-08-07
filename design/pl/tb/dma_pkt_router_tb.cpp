@@ -18,7 +18,7 @@ int main() {
     // from each img solver kernel generating a 128b metadata header
     const int AXIS128_SAMPLES = (PULSES*RC_SAMPLES)/2 + IMG_SOLVERS;
 
-    hls::stream<ap_axiu<128, 0, 0, 0>> aie_stream_in;
+    hls::stream<ap_axiu<128, 0, 0, 0>> pl_stream_in;
 
     // Allocate DDR memory buffer
     ap_uint<64>* ddr_mem = (ap_uint<64>*) malloc(PULSES*RC_SAMPLES*8);
@@ -101,12 +101,12 @@ int main() {
             pkt.last = tlast_flag;
             pkt.keep = (ap_uint<16>) (tkeep_val & 0xFFFF);
 
-            // Write data into aie_stream_in
-            aie_stream_in.write(pkt);
+            // Write data into pl_stream_in
+            pl_stream_in.write(pkt);
         }
 
         // PL kernel invocation
-        int ret = dma_pkt_router(aie_stream_in, ddr_mem);
+        int ret = dma_pkt_router(pl_stream_in, ddr_mem);
 
     }
 
