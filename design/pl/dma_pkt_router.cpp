@@ -8,9 +8,9 @@
 ////////////////////////////////////////////////////////////
 // Top Function of DMA packet router controller
 ////////////////////////////////////////////////////////////
-int dma_pkt_router(hls::stream<ap_axiu<128, 0, 0, 0>> &aie_stream_in,
+int dma_pkt_router(hls::stream<ap_axiu<128, 0, 0, 0>> &pl_stream_in,
                    ap_uint<64>* ddr_mem) {
-    #pragma HLS INTERFACE axis port=aie_stream_in
+    #pragma HLS INTERFACE axis port=pl_stream_in
     #pragma HLS INTERFACE m_axi port=ddr_mem offset=slave bundle=gmem depth=PULSES*RC_SAMPLES
     #pragma HLS INTERFACE s_axilite port=ddr_mem bundle=control
     #pragma HLS INTERFACE s_axilite port=return  bundle=control
@@ -31,7 +31,7 @@ int dma_pkt_router(hls::stream<ap_axiu<128, 0, 0, 0>> &aie_stream_in,
     IMG_KERNEL_LOOP:for(int kern=0; kern<IMG_SOLVERS_PER_SWITCH; kern++) {
 
         // Read in first 128 bits of packet containing metadata
-        metadata = aie_stream_in.read();
+        metadata = pl_stream_in.read();
         
         // First 32 bits is the packet switch header (See AMD's UG1079 docs):
         //
@@ -65,7 +65,7 @@ int dma_pkt_router(hls::stream<ap_axiu<128, 0, 0, 0>> &aie_stream_in,
         // Loop through number of samples in stream. Each 64 bit is 1 cfloat sample
         // (i.e. 32 bit float real + 32 bit float imaginary)
         IMG_DATA_LOOP:for(int idx=0; idx<SAMPLES_PER_KERN; idx+=2) {
-            img_data = aie_stream_in.read();
+            img_data = pl_stream_in.read();
             ddr_mem[ddr_offset + idx] = img_data.data.range(63, 0);
             ddr_mem[ddr_offset + (idx+1)] = img_data.data.range(127, 64);
         }
