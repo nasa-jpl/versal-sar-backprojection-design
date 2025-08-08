@@ -28,7 +28,7 @@ int main() {
     // Loop through AIE data AXI Streams (each iteration is representative of calling another instance of the PL kernel)
     for(int pl_kern=0; pl_kern<AIE_SWITCHES; pl_kern++) {
 
-        // Current working dir inside versal-design-build/build/hw/plsim/dma_pkt_router_testbench/solution1/csim/build
+        // Current working dir inside versal-sar-backprojection-design/build/hw/plsim/dma_pkt_router_testbench/solution1/csim/build
         // Assumes there is only one instance of bpGraph (hence the 0 on aie_to_plio_switch_0_*)
         std::string aie_data_str = "../../../../../aiesim/aiesimulator_output/aie_to_plio_switch_0_" + std::to_string(pl_kern) + ".csv";
         std::ifstream infile(aie_data_str.c_str());
@@ -111,7 +111,7 @@ int main() {
     }
 
     // Open a file for writing. Current working dir inside 
-    // versal-design-build/design/pl/tb/dma_pkt_router_testbench/solution1/csim/build
+    // versal-sar-backprojection-design/design/pl/tb/dma_pkt_router_testbench/solution1/csim/build
     FILE *img_fp = fopen("../../../../output_img.csv", "w");
     if (img_fp == NULL) {
         perror("Error opening output_img.csv file");
@@ -136,7 +136,7 @@ int main() {
                                          (uint32_t)(ddr_mem[i] & 0xFFFFFFFF),
                                          (uint32_t)(ddr_mem[i]>>32));
 
-    printf("\nSuccessfully wrote output image to versal-design-build/plsim/output_img.csv\n\n");
+    printf("\nSuccessfully wrote output image to versal-sar-backprojection-design/plsim/output_img.csv\n\n");
 
     free(ddr_mem);
 

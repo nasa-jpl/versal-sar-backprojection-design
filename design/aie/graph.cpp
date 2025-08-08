@@ -73,7 +73,6 @@ int main(int argc, char ** argv) {
     }
     std::string line;
     int pulse_idx = 0;
-    //std::getline(file, line); // skip header line
     while (std::getline(st_file, line) && pulse_idx < PULSES) {
         std::stringstream ss(line);
         std::string value;
@@ -106,7 +105,6 @@ int main(int argc, char ** argv) {
         return 1;
     }
     pulse_idx = 0;
-    //std::getline(file, line); // skip header line
     while (std::getline(rc_file, line) && pulse_idx < PULSES) {
         std::stringstream ss(line);
         std::string value;

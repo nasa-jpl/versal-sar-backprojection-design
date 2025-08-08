@@ -123,17 +123,6 @@ run: package
 # PL target for building all HLS Programmable Logic (PL) kernels
 pl: ${PL_BUILD_DIR}/dma_pkt_router.xo
 
-# PL sim target for building all artifacts needed for running the stride
-# controller PL sim.
-#plsim_stride:
-#	mkdir -p ${PLSIM_BUILD_DIR}/plsimulator_output; \
-#	cd ${PLSIM_BUILD_DIR}; \
-#	vitis-run --tcl ${PROJECT_DIR}/design/pl/tb/run_dma_stride_controller_tb.tcl | tee plsim_stride.log
-#	@echo ""
-#	@echo "DMA Stride Controller PL Simulation, Complete..."
-#	@echo "####################################"
-#	@echo ""
-
 # PL sim target for building all artifacts needed for running the packet router
 # PL sim. If the CSV file doesn't exist, run aiesim to generate it.
 plsim_router:
@@ -206,19 +195,6 @@ metrics: ${XSA_BUILD_DIR}/${XSA}
 	@echo ""
 
 ##### INDIRECT TARGETS #####
-
-# Building DMA Stride Controller PL kernel
-#${PL_BUILD_DIR}/dma_stride_controller.xo: design/pl/dma_stride_controller.cpp design/pl/dma_stride_controller.h design/pl/stride_controller_config.cfg ${PROJECT_DIR}/design/common.h
-#	mkdir -p ${PL_BUILD_DIR}; \
-#	cd ${PL_BUILD_DIR}; \
-#	v++ -c --mode hls --platform=${PLATFORM} -t ${PL_TARGET} \
-#		--work_dir=${PROJECT_DIR}/${BUILD_DIR}/Work \
-#		--config ${PROJECT_DIR}/design/pl/stride_controller_config.cfg; \
-#	mv ${PROJECT_DIR}/${BUILD_DIR}/Work/dma_stride_controller.xo ./
-#	@echo ""
-#	@echo "DMA Stride Controller PL Kernel Built..."
-#	@echo "####################################"
-#	@echo ""
 
 # Building DMA Packet Router PL kernel
 ${PL_BUILD_DIR}/dma_pkt_router.xo: design/pl/dma_pkt_router.cpp design/pl/dma_pkt_router.h design/pl/pkt_router_config.cfg ${PROJECT_DIR}/design/common.h
