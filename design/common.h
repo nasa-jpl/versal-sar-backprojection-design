@@ -14,7 +14,7 @@
 // work to be processed. As a result, this equation (i.e. pixels to be
 // processed per img solver) must be equal to a whole number:
 // (RC_SAMPLES * PULSES) / (IMG_SOLVERS_PER_SWITCH * AIE_SWITCHES)
-#define PULSES 602
+#define PULSES 714
 
 // Number of range compression samples. This will also be the number of columns
 // of the output image. Test data only generated for below available options
