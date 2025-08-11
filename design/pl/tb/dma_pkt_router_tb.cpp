@@ -136,7 +136,7 @@ int main() {
                                          (uint32_t)(ddr_mem[i] & 0xFFFFFFFF),
                                          (uint32_t)(ddr_mem[i]>>32));
 
-    printf("\nSuccessfully wrote output image to versal-design-build/build/plsim/plsimulator_output/output_img.csv\n\n");
+    printf("\nSuccessfully wrote output image to versal-sar-backprojection-design/plsim/plsimulator_output/output_img.csv\n\n");
 
     free(ddr_mem);
 
