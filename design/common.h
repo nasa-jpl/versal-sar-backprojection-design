@@ -8,11 +8,6 @@
 #define STRINGIFY(x) #x
 #define TO_STRING(x) STRINGIFY(x)
 
-// Number of range compression samples. This will also be the number of columns
-// of the output image. Test data only generated for below available options
-// AVAILABLE OPTIONS: 512, 256, 128, 64 
-#define RC_SAMPLES 512
-
 // Number of pulses to process. This will also be the number of rows of the
 // output image. Because the work to be processed is divided equally across all
 // AI cores, this number must be selected carefully so there is no leftover
@@ -20,6 +15,17 @@
 // processed per img solver) must be equal to a whole number:
 // (RC_SAMPLES * PULSES) / (IMG_SOLVERS_PER_SWITCH * AIE_SWITCHES)
 #define PULSES 602
+
+// Number of range compression samples. This will also be the number of columns
+// of the output image. Test data only generated for below available options
+// AVAILABLE OPTIONS: 512, 256, 128, 64 
+#define RC_SAMPLES 512
+
+// Number of azimuth samples. This will also be the number of rows of the
+// output image. TODO: It would be nice to add AZ_SAMPLES so that PULSES and
+// AZ_SAMPLES can be differentiated when the AIE engine is performing the
+// cumulative summation over the AZ_SAMPLES. 
+//#define AZ_SAMPLES PULSES
 
 // Number of AIE switches to use
 #define AIE_SWITCHES 7
