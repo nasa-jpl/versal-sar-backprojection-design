@@ -1,6 +1,6 @@
 # By: Austin Owens
 # Date: 5/21/2024
-# Desc: Makefile for building various elements of the platform for image FFT cross-correlation
+# Desc: Makefile for building various elements of the design
 #
 # Targets: package, run, pl, plsim_router, plsim_stride, aie, host, aiesim, aiesim_profile, aiesim_xpe, metrics, clean
 # 
@@ -77,7 +77,6 @@ endif
 endif
 
 .PHONY: package run pl plsim_stride plsim_router aie aiesim aiesim_profile host aiesim_xpe metrics clean
-
 
 ##### DIRECT TARGETS #####
 

@@ -11,7 +11,6 @@ add_files $script_dir/../dma_stride_controller.cpp
 
 # Add test bench & files
 add_files -tb $script_dir/dma_stride_controller_tb.cpp
-#add_files -tb $script_dir/dma_stride_controller_tb.cpp -cflags "-DALLOW_EMPTY_HLS_STREAM_READS"
 
 # Set the top-level function
 set_top dma_stride_controller
