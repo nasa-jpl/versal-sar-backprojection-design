@@ -223,6 +223,15 @@ Where:
 
 The above network settings should match the network settings within your customized [pxeboot configuration file](helper_scripts/pxelinux.cfg/default-arm-versal).
 
+## Branches
+
+There are 3 seperate branches for the design:
+- [main](https://github.jpl.nasa.gov/atowens/versal-sar-backprojection-design/tree/main)
+- [host_stride](https://github.jpl.nasa.gov/atowens/versal-sar-backprojection-design/tree/host_stride)
+- [pl_stride](https://github.jpl.nasa.gov/atowens/versal-sar-backprojection-design/tree/pl_stride)
+
+The features of these branches are further discussed in [doc/versal_sar_backproject.pdf](doc/versal_sar_backproject.pdf).
+
 ## Documentation Generation
 
 The following packages were installed for documentation generation:
