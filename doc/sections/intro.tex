@@ -8,7 +8,61 @@
 % -----------------------------------------------------------------------------
 \begin{figure}[hbtp]
   \begin{center}
-    \includegraphics[width=\textwidth]
+    \includegraphics[width=0.85\textwidth]
+    {figures/sar-flight-path-geometry-data.png}
+  \end{center}
+  \caption{Scanning configuration for a left looking SAR with a rectangular antenna~\cite{Olmsted1993}}
+  \label{fig:sar-flight-path-geometry-data}
+\end{figure}
+% -----------------------------------------------------------------------------
+
+Synthetic Aperture Radar (SAR) is a radar imaging modality that enables
+high-resolution imagery by using antenna motion over the scene and combining
+measurements from many nearby positions along the flight path, shown in figure
+\ref{fig:sar-flight-path-geometry-data}. At centimeter wavelengths, achieving
+about ten meter resolution on the ground with a single antenna would require an
+antenna several kilometers long from orbit and still tens to a few hundred
+meters from typical aircraft, which is not realistic to build or fly. During
+processing, the many measurements are combined so they behave as if they were
+taken with a much longer antenna, which provides the needed resolution without
+a very large physical antenna. Because SAR does not rely on sunlight, it can
+image day or night and in most weather conditions, supporting Earth
+observation, hazard assessment, sea-ice tracking, wetland mapping, and broader
+environmental monitoring~\cite{NASAEarthdataSAR}.
+
+A few geometry terms appear throughout this paper. The flight direction is the
+along-track or azimuth direction and the perpendicular direction is the
+across-track or range direction. The distance measured along the radar line of
+sight is the slant range, which can be projected to ground range. The look
+angle describes how far the antenna points away from nadir, while the incidence
+angle is the angle between the radar beam and the local surface normal.
+Depending on terrain and viewing geometry, SAR images can contain layover and
+shadow.
+
+The work throughout this paper focuses on spotlight-mode backprojection, an
+image reconstruction technique that operates on the raw complex radar
+measurements known as phase-history data. For each image pixel, backprojection
+uses the recorded platform trajectory to compute the two-way travel time to
+that pixel for every pulse. Each recorded echo is aligned to that pixel by
+applying the computed delay. This can be done by shifting the waveform in time
+or by applying the corresponding phase shift across the signal’s bandwidth.
+After alignment, the echoes are summed. When the delays match the true geometry
+and timing, the aligned echoes add in phase at that pixel and tend to cancel
+elsewhere, producing a focused image. Because backprojection coherently
+combines many pulses for every pixel, the echoes from the true location align
+in phase and reinforce, increasing the pixel’s intensity even when the platform
+does not fly a perfectly straight path or the viewing geometry is not ideal,
+provided the trajectory and timing are modeled with sufficient accuracy. These
+strengths come with significant computational cost. Consequently, many
+operational systems transmit phase-history data to the ground and form images
+there rather than on board.
+
+% -----------------------------------------------------------------------------
+% Versal Architecture
+% -----------------------------------------------------------------------------
+\begin{figure}[hbtp]
+  \begin{center}
+    \includegraphics[width=0.85\textwidth]
     {figures/versal_arch.png}
   \end{center}
   \caption{Versal ACAP Functional Diagram ~\cite{AMD_Versal_WP505}}
@@ -16,29 +70,24 @@
 \end{figure}
 % -----------------------------------------------------------------------------
 
-Synthetic Aperture Radar (SAR) is a high-resolution imaging technique that
-exploits the motion of a radar antenna over a target region to synthesize a
-large effective aperture~\cite{Jansing_SAR_Concepts}. By transmitting pulses
-and recording the backscattered echoes at multiple positions along its path,
-SAR systems collect data that can be processed into detailed scene images. The
-key advantage of SAR is its ability to achieve fine resolution in both range
-and cross-range, making it essential for remote sensing tasks such as Earth
-observation, surveillance, and environmental monitoring.
+This paper develops an On-Board Processing (OBP) implementation of
+backprojection on a Versal Adaptive Compute Acceleration Platform (ACAP), as
+shown in figure \ref{fig:versal_arch}. The Versal ACAP is a heterogeneous
+compute environment featuring Scalar Engines (CPUs), Adaptable Engines
+(FPGA/programmable logic), and Intelligent Engines (AI and DSP cores), which
+allow developers to accelerate compute-heavy tasks \cite{AMD_Versal_WP505}. We
+design and integrate a data path from the dual Cortex-A72 processors, through
+the network-on-chip, to the AI Engines, with ping-pong buffering, DMA
+stride-controlled reordering to feed the AI Engine and Programmable Logic (PL)
+kernels efficiently. The FPGA fabric hosts the DMA reordering logic, and the AI
+Engines perform the core backprojection computations. We also provide
+simulation code for the AI Engine array and testbenches FPGA logic. The
+Cortex-A72 processors orchestrate the launch of the spotlight-mode
+backprojection benchmark and record execution times. Upon completion, the AI
+Engines stream the image through the PL DMA reordering kernel to assemble a
+contiguous image in DDR. We report execution times and representative power
+measurements at selected AI Engine core counts and illustrate how the design
+scales with additional cores. These results characterize the performance and
+power trade space for on-board backprojection on this class of device.
 
-Among various SAR image formation methods, backprojection is a conceptually
-straightforward yet computationally intensive approach. It coherently sums the
-radar returns for each image pixel, applying appropriate time shifts (or phase
-corrections) to align signal energy across the collected pulses. This
-effectively recreates the reflected energy distribution, yielding high-quality
-images resilient to motion errors, off-nominal geometries, and wide-band
-signals. However, backprojection has a computational load proportional to the
-product of the number of pulses and the number of pixels, which can be
-expensive to implement at scale.
-
-This work presents the design and implementation of a SAR backprojection
-pipeline on the AMD Versal ACAP (Adaptive Compute Acceleration Platform). The
-Versal ACAP is a heterogeneous compute environment featuring Scalar Engines
-(CPUs), Adaptable Engines (FPGA/programmable logic), and Intelligent Engines
-(AI and DSP cores), which allow developers to accelerate compute-heavy tasks
-\cite{AMD_Versal_WP505}. 
 

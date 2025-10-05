@@ -4,324 +4,683 @@
 \label{sec:impl}
 
 % =============================================================================
-\subsection{Overview}
+\subsection{Algorithmic Basis and Dataset}
 % =============================================================================
 
-The design primarily relies on AIE processing, with the ARM Cortex-A72
-processor managing AIE input, execution flow, and kernel configuration. This
-setup isolates and evaluates the AIE's contribution without involving other
-processing resources such as the FPGA or DSP engines. Future efforts may
-incorporate these additional resources (see Section \ref{sec:future_work}).
+This design builds upon the mathematical formulations presented in the "SAR
+Image Formation Toolbox for MATLAB" by Gorham et al.~\cite{Gorham}. The toolbox
+implements a backprojection algorithm in spotlight mode using the "Gotcha
+Volumetric SAR Data Set, Version 1.0" as its primary example~\cite{GOTCHA}.
+This dataset, collected at X-band with a 640~MHz bandwidth, includes full
+azimuth coverage across eight elevation angles and complete polarization. The
+imaging scene contains civilian vehicles and calibration targets, making it a
+standard benchmark for validating SAR image-formation methods.
 
-This design builds upon the mathematical formulations presented in "SAR Image
-Formation Toolbox for MATLAB" by Gorham et al. \cite{Gorham}. The focus is on
-spotlight imaging mode, utilizing the GOTCHA Volumetric SAR dataset discussed
-in detail in Section \ref{subsec:dataset}. A parallel processing approach is
-employed to accelerate the algorithm from Gorham et al. This leverages the
-Versal's architecture by utilizing SIMD instructions, multi-core processing,
-and ILP. The current implementation primarily emphasizes SIMD and multi-core
-parallelism. Further exploration of ILP optimization is discussed in Section
-\ref{sec:future_work}. To validate accuracy, focused output images generated
-from both Versal hardware and AIE simulations are compared against image
-artifacts produced by the Matlab code provided in Gorham et al.'s appendix.
+The dataset is distributed in MATLAB binary format (*.mat). Each file
+represents one degree of azimuth for a single pass and polarization, and
+contains phase-history samples, frequency vectors, antenna coordinates (X, Y,
+Z), range to scene center, and azimuth/elevation angles. These measurements
+supply both the raw radar returns and the platform geometry needed to drive the
+backprojection reconstruction.
 
-During development, several custom AIE kernels and graphs were evaluated. The
-finalized design includes two custom AIE kernels: the Slowtime Splicer (STS)
-and the Image Reconstruction kernel. The design also supports scaling the
-number of Image Reconstruction kernels for parallel processing, which can
-currently be instantiated 4 or 8 times. Future work aims to further increase
-this number (see Section \ref{sec:future_work}).
+In this work, Gorham’s mathematical formulation and dataset are mapped onto
+Versal hardware to evaluate parallelization strategies. Focused images produced
+by the AI Engine implementation are compared against the MATLAB reference
+outputs.
 
-Both the STS and Image Reconstruction kernels play a crucial role in
-accelerating the computationally demanding steps of the Backprojection
-algorithm. A high level overview of the two kernels are given below:
+The following sections describe how this algorithm and dataset are mapped onto
+the Versal ACAP architecture, including the division of responsibilities across
+the AI Engine, programmable logic, and ARM cores.
 
+% =============================================================================
+\subsection{Algorithm Mapping to Hardware}
+% =============================================================================
+
+The Versal architecture was used to accelerate the Gorham backprojection
+formulation. Typical acceleration methods on the Versal are expressed through
+SIMD intrinsics, multi-core instantiation, and instruction-level parallelism
+(ILP). The current implementation heavily emphasizes SIMD and multi-core
+parallelism. While some ILP optimizations were implemented, further ILP
+modifications could potentially be made and are reserved for future work (see
+Section~\ref{sec:future_work}). Accuracy is validated by comparing focused
+images from the Versal hardware and AI Engine simulations against MATLAB
+reference outputs.
+
+During development, multiple custom AI Engine and PL kernel designs were
+evaluated. The finalized design includes three types of AI Engine kernels and
+up to two PL kernels (depending on the build branch described in
+Section~\ref{sec:system_overview}). These kernels can be instantiated a
+specific number of times based on the build configuration. The summary of
+these kernels, along with how many times the they can be instantiated in the
+current design, are listed below:
+
+\subsubsection{AI Engine Kernels}
 \begin{itemize}
-    \item \textbf{Slowtime Splicer (STS) Kernel:} A dedicated AIE kernel
-        responsible for broadcasting antenna x, y, and z coordinates, range to
-        scene center and range compressed data to all Image Reconstruction
-        kernels.  
-    \item \textbf{Image Reconstruction Kernels:} A dedicated AIE kernel
-        responsible for handling the core backprojection processing. They
-        calculate the differential range for each pixel in the image (m),
-        measuring its relative distance compared to the central pixel. They
-        perform cumulative summing and phase correction, leveraging the
-        parallel processing capabilities of the AIEs for efficient execution.
+    \item \textbf{Data Broadcast Kernel (1x):} Distributes slow-time radar data
+        (antenna coordinates, range-to-scene center) and range-compressed
+        samples to all Image Reconstruction kernels.
+    \item \textbf{Pixel Demux Kernel (1x-7x):} Assigns target pixels of interest to the 
+        Image Reconstruction kernels. In the \textit{main} branch, this kernel 
+        also performs input sorting. In \textit{host\_stride} and 
+        \textit{pl\_stride}, sorting is performed by the ARM or PL, 
+        respectively.
+    \item \textbf{Image Reconstruction Kernel (1x-224x):} Implements the core 
+        backprojection loop. For each pixel, it computes the differential 
+        range relative to the scene center, applies phase correction, and 
+        accumulates contributions across pulses. These kernels exploit SIMD 
+        vectorization to maximize throughput.
 \end{itemize}
 
-Additionally, the AIE graph model heavily relies on broadcasting, which is a
-AIE graph construct that allows efficiently sending the same data from one
-kernel to multiple other kernels in parallel. The kernels and the graph
-implementation are talked about in more detail in Sections
-\ref{subsec:sts_kern}, \ref{subsec:img_recon_kern}, and \ref{subsec:graph_impl}
-below.
+\subsubsection{PL Kernels}
+\begin{itemize}
+    \item \textbf{DMA Packet Router Kernel (1x-7x):} Reorders merged AXI4-Stream 
+        outputs from the AI Engine into contiguous memory in DDR, ensuring 
+        that image pixels are correctly placed for reconstruction.
+    \item \textbf{DMA Stride Controller Kernel (1x-7x):} Reads and reorders specific 
+        data segments from DDR before streaming them into the AI Engine, 
+        offloading the input-sorting responsibility from the ARM or AI Engine.
+\end{itemize}
+
+These kernels form the building blocks of the overall processing chain. A
+scaled-down version of the design showing how these kernels interconnect are
+displayed in Figure~\ref{fig:aie_graph}. The next section presents the
+system-level overview and how data flows and interacts through the system as a
+whole.
 
 % =============================================================================
-\subsection{Data Set}
+\subsection{System Overview}
 % =============================================================================
-\label{subsec:dataset}
+\label{sec:system_overview}
 
-The data set used is the "Gotcha Volumetric SAR Data Set, Version
-1.0" \cite{GOTCHA}. This data set consists of SAR phase history data collected
-at X-band with a 640 MHz bandwidth with full azimuth coverage at 8 different
-elevation angles with full polarization. The imaging scene consists of numerous
-civilian vehicles and calibration targets. The data is stored in MATLAB binary
-format (*.mat files). Each file contains the phase history collected over one
-degree of azimuth for a single pass and a single polarization. Loading a file
-gives a single MATLAB structure with fields containing the k-space data,
-frequencies, X, Y, Z coordinate antenna locations, range to scene center,
-azimuth angle (degrees), and elevation angle (degrees).
-
-
-% =============================================================================
-\subsection{Slowtime Splicer (STS) Kernel}
-% =============================================================================
-\label{subsec:sts_kern}
-
-The STS kernel receives its data from the ARM processor through 5 GMIO ports
-and broadcasts its data via two output ports. Both inputs and outputs are
-configured as ping-pong buffers (as opposed to singular buffers or streaming
-interfaces). The inputs and outputs for the STS kernel are listed below:
+The design integrates the ARM Cortex-A72 processor, the AI Engine array, and
+the Programmable Logic (PL). At a high-level, the ARM Cortex-A72 is responsible
+for the following tasks:
 
 \begin{itemize}
-    \item \textbf{x\_ant\_pos\_in (1 float):} The X coordinate of the antenna
-    \item \textbf{y\_ant\_pos\_in (1 float):} The Y coordinate of the antenna
-    \item \textbf{z\_ant\_pos\_in (1 float):} The Z coordinate of the antenna
-    \item \textbf{ref\_range\_in (1 float):} Range to scene center from antenna
-    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Range compressed phase
-        data
-    \item \textbf{slowtime\_out (4 floats):} Antenna X, Y, Z and range to scene
-        center data spliced together 
-    \item \textbf{rc\_out (\textit{RC\_SAMPLES} cfloats):} Range compressed phase
-        data
+    \item Retrieves input data from non-volatile memory and orchestrates
+        dataflow throughout the system.
+    \item Manages PL kernel and AI Engine graph control execution.
+    \item Configures kernel parameters.
+    \item Records performance metrics.
+\end{itemize}
+
+\noindent The AI Engine array is responsible for the following tasks:
+
+\begin{itemize}
+    \item Parallelizes the backprojection algorithm across several AI kernels.
+    \item Vectorizes the backprojection algorithm on each AI kernel.
+    \item Performs minimal ILP through for loop pipelining.
+    \item Sorts pixels into specific AI kernels (based on which branch of the
+        code is being ran).
+    \item Focuses image data per pulse until the ARM processor signals an RTP signal.
+\end{itemize}
+
+\noindent The PL acts as a custom DMA controller and is responsible for the following tasks:
+
+\begin{itemize}
+    \item Post-processing the data after AI Engine egress by reordering packets
+        into DDR.
+    \item Pre-processing the data before AI Engine ingress by reordering
+        packets from DDR (based on which branch of the code is being ran).
+\end{itemize}
+
+\noindent There are three branch configurations to compare performance trade-offs:
+
+\begin{itemize}
+    \item \textbf{main:} The AI Engine kernels ingest unsorted data and perform 
+        their own input reordering before computation.
+    \item \textbf{host\_stride:} The ARM Cortex-A72 pre-sorts the data in DDR, 
+        reducing the sorting work inside the AI Engine.
+    \item \textbf{pl\_stride:} The PL handles the pre-processing by implementing
+        a DMA stride controller that pre-sorts the data before it reaches the
+        AI Engine.
+\end{itemize}
+
+Regardless if pre-processing is handled in the AI Engine, ARM, or PL, the
+post-processing is always handled within the PL logic. This is required because
+packet stream mergers are used inside the AI Engine to collapse many kernel
+outputs into the limited set of GMIO ports (32 input and 32 output). While
+merging improves GMIO port utilization, it scrambles output order. A PL packet
+router therefore inspects packet IDs on the AXI streams and reorders them into
+a contiguous layout in DDR, so the final image is coherent without additional
+post-processing work by the ARM processor.
+
+% -----------------------------------------------------------------------------
+% Default System Architecture
+% -----------------------------------------------------------------------------
+\begin{figure}[!hbtp]
+  \begin{center}
+    \includegraphics[width=\textwidth]{figures/default_system_arch.png}
+  \end{center}
+  \caption{System architecture for the \textit{main} and \textit{host\_stride}
+      branches. The ARM loads data to DDR (unsorted in \textit{main},
+      pre-sorted in \textit{host\_stride}), which is then sent through the NoC to AI
+      Engine backprojection clusters. When the ARM determines the image is
+      sufficiently focused, it issues an RTP signal over the NoC directing the
+      clusters to emit their fully focused image data. The results are streamed
+      to the PL packet router, which reorders merged outputs and writes them
+  contiguously to DDR.}
+  \label{fig:default_system_arch}
+\end{figure}
+% -----------------------------------------------------------------------------
+
+As shown in Figure~\ref{fig:default_system_arch}, all data transactions between 
+compute domains traverse the Network-on-Chip (NoC). Range-compressed radar 
+pulses are delivered to the AI Engine through the NoC, and for each pulse an 
+RTP signal is also issued from the ARM to indicate whether the kernels should 
+continue cumulative summing across pulses or flush their accumulated results. 
+When a flush is triggered, the fully focused image data is emitted via 
+AXI4-Stream into the PL packet router, which reorders the merged streams and 
+writes the results contiguously to DDR.
+
+\newpage
+
+% -----------------------------------------------------------------------------
+% PL Stride Controller System Architecture
+% -----------------------------------------------------------------------------
+\begin{figure}[!hbtp]
+  \begin{center}
+    \includegraphics[width=\textwidth]{figures/pl_stride_system_arch.png}
+  \end{center}
+  \caption{System architecture for the \textit{pl\_stride} branch. The ARM
+      loads data to DDR, and the PL stride controller selects and reorders the
+      required segments before forwarding them through the NoC to AI Engine
+      backprojection clusters. When the ARM determines the image is
+      sufficiently focused, it issues an RTP signal over the NoC directing the
+      clusters to emit their fully focused image data. The results are streamed
+      to the PL packet router, which reorders merged outputs and writes them
+      contiguously to DDR.}
+  \label{fig:pl_stride_system_arch}
+\end{figure}
+% -----------------------------------------------------------------------------
+
+For the \textit{pl\_stride} architecture shown in
+Figure~\ref{fig:pl_stride_system_arch}, the PL takes on the input-side sorting
+responsibility. Instead of the ARM or AI Engine performing data reordering, the
+PL stride controller reads specific segments from DDR and delivers them
+directly to the targeted backprojection clusters in the AI Engine. This
+eliminates sorting overhead in the ARM software or AI kernels and leverages
+dedicated DMA capabilities in the PL. Once inside the AI Engine backprojection
+kernels, computation proceeds as in the other branches: results are packetized,
+passed to the PL packet router, and written to DDR in the correct order for the
+ARM to retrieve a fully focused image.
+
+The dataflow described here is expressed in the AIE graph programming model,
+which manages kernel interconnects, buffering, and synchronization. At a high
+level, the graph provides constructs such as broadcasting (sends specific data
+from one kernel to many), packet splitters (dividing a stream into multiple
+paths), and packet mergers (combining multiple streams into one). These
+abstractions allow the toolchain to map kernel interconnects onto the
+underlying AXI4-Stream fabric without requiring manual stream management
+software. The specific kernel implementations and the overall graph topology
+are described in more detail in Sections~\ref{subsec:data_broadcasting_kern},
+\ref{subsec:pixel_demux_kern}, \ref{subsec:img_recon_kern},
+\ref{subsec:pl_pkt_router_kern}, \ref{subsec:pl_stride_kern}, and
+\ref{subsec:graph_impl}.
+
+\FloatBarrier
+
+\newpage
+
+% =============================================================================
+\subsection{AI and PL Kernels}
+% =============================================================================
+\label{subsec:ai_pl_kernels}
+
+% -----------------------------------------------------------------------------
+% Simplified AI Engine Graph w/o PL DMA stride controller for pre-processing
+% -----------------------------------------------------------------------------
+\begin{figure}[hbtp]
+  \begin{center}
+    \includegraphics[width=1\textwidth]
+    {figures/system_2switch_2aie.png}
+  \end{center}
+  \caption{A scaled-down version of the design showing the dataflow between the
+      AI Engine and the PL kernels. There is a total of 1 Data Broadcaster, 2
+      Pixel Demuxers, and 4 Image Reconstruction AI kernels, along with 2 DMA
+      Packet Router PL kernels for AI Engine post processing.}
+  \label{fig:aie_graph}
+\end{figure}
+% -----------------------------------------------------------------------------
+
+Figure~\ref{fig:aie_graph} depicts a scaled-down version of the dataflow
+between the AI Engine and the PL kernels. This design comes from the \textit{main} or
+\textit{host\_stride} branches where the following configurations within
+\textit{design/common.h} were set:
+
+\begin{itemize}
+    \item {\boldmath $PULSES = 1$}: Number of pulses to process per iteration.
+    \item {\boldmath $RC\_SAMPLES = 64$}: Number of range compression samples to process
+        per iteration.
+    \item {\boldmath $AIE\_SWITCHES = 2$}: The number of AXI4-Stream switch
+        splitter/merger pairs. Also known as the number of backprojection
+        clusters (BP Clusters).
+    \item {\boldmath $IMG\_SOLVERS\_PER\_SWITCH = 2$}: The number of Image Reconstruction
+        kernels per BP cluster.
+\end{itemize}
+
+The maximum number of AXI4-Stream channels per packet spliter or merger is 32.
+This means up to 32 Image Reconstruction kernels can exist per packet
+spliter/merger pair (hereafter, a BP Cluster). The above diagram only depicts
+two Image Reconstruction kernels per BP Cluster. Only one Pixel Demux AI kernel
+and DMA Packet Router PL kernel can exist per BP Cluster (as depicted in
+Figure~\ref{fig:aie_graph}).
+
+
+\FloatBarrier
+
+% =============================================================================
+\subsubsection{Data Broadcast Kernel}
+% =============================================================================
+\label{subsec:data_broadcasting_kern}
+
+There is only one Data Broadcast kernel that needs to be instantiated in the
+design. The Data Broadcast kernel receives its data from the ARM processor via
+DDR through two GMIO ports (slowtime\_in and rc\_in) and it broadcasts its data
+via two output ports (slowtime\_out and rc\_out) feeding into the Image
+Reconstruction kernel. The slowtime\_in and slowtime\_out ports transfer
+AXI4-Stream data and rc\_in and rc\_out ports transfer buffered ping-pong data.
+The inputs and outputs for the Data Broadcast kernel are listed below:
+
+\begin{itemize}
+    \item \textbf{slowtime\_in (float):} AXI4-Stream from the DDR
+        originating from the ARM processor that contains antenna X, Y, Z and
+        range to scene center.
+    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Buffered range
+        compressed phase data from the DDR originating from the ARM processor.
+    \item \textbf{slowtime\_out (float):} AXI4-Stream that contains antenna
+        X, Y, Z and range to scene center. This stream is broadcasted to every
+        instantiated Image Reconstruction kernel.
+    \item \textbf{rc\_out (\textit{RC\_SAMPLES} cfloats):} Buffered range
+        compressed phase data that is broadcasted to every instantiated Image
+        Reconstruction kernel.
 \end{itemize}
 
 As mentioned in Section \ref{subsec:aie_graphs}, execution of kernels begin
-when they receive their specified data samples matching their allocated buffer
-size (if using buffers). The list above shows the antenna X, Y, Z and reference
-range buffer sizes each being 1 float (4 bytes per float) and the range
-compressed phase data buffer size being \textit{RC\_SAMPLES} cfloats (8 bytes
-per cfloat), where \textit{RC\_SAMPLES} can variably be set within the
-\textit{common.h} header file. Once the input buffers are completely filled,
-the kernel will execute. Currently, \textit{RC\_SAMPLES} can only be 64 or 128
-cfloats. 128 cfloats is the maximum size due to ping-pong buffer size
-limitations. Future work aims to further increase \textit{RC\_SAMPLES} (see
-Section \ref{sec:future_work}). Once the STS kernel executes, it performs the
-following steps:
+when they receive their specified number of data samples matching their
+allocated buffer size (assuming the kernel uses any buffer types as input). The
+Broadcast kernel only has one buffer input, which is \textit{rc\_in} (shown in
+Figure~\ref{fig:aie_graph}). The \textit{rc\_in} buffer holds up to
+\textit{RC\_SAMPLES} cfloats, where each cfloat is 8 bytes in total (2 floats
+for the real and imaginary numbers). Once \textit{rc\_in} buffer is completely
+filled, the kernel will execute. Currently, \textit{RC\_SAMPLES} can only be
+64, 128, 256, or 512 cfloats. 512 cfloats is the maximum size due to buffer
+size limitations within the AI Engine. Once the Data Broadcast kernel executes,
+it performs the following steps:
 
 \begin{enumerate}
-    \item Pop a single float from \textit{x\_ant\_pos\_in} and push it onto the
-        \textit{slowtime\_out} buffer
-    \item Pop a single float from \textit{y\_ant\_pos\_in} and push it onto the
-        \textit{slowtime\_out} buffer
-    \item Pop a single float from \textit{z\_ant\_pos\_in} and push it onto the
-        \textit{slowtime\_out} buffer
-    \item Pop a single float from \textit{ref\_range\_in} and push it onto the
-        \textit{slowtime\_out} buffer
-    \item The STS kernel now has a full \textit{slowtime\_out} buffer so it
-        will automatically release lock on the \textit{slowtime\_out} buffer
-        and forward that data out from local memory to the next AIE kernel
-        memory in the chain via the AXI4 streaming protocol.
-    \item \label{itm:repeat} Pop 16 cfloats from \textit{rc\_in} (SIMD
-        operation) and push the vector onto the \textit{rc\_out} buffer
-    \item Repeat step \ref{itm:repeat} for a total of \textit{RC\_SAMPLES}/16
-        times (since 16 samples are pushed at a time)
-    \item The STS kernel now has a full \textit{rc\_out} buffer so it
-        will automatically release lock on the \textit{rc\_out} buffer
-        and forward that data out from local memory to the next AIE kernel
-        memory in the chain via the AXI4 streaming protocol.
+    \item Perform a SIMD vector operation that pops 4 floats from the
+        \textit{slowtime\_in} AXI4-Stream port and pushes it onto the
+        \textit{slowtime\_out} AXI4-Stream port. This may seem redundant, but
+        it is needed to exploit the broadcasting mechanisms within the AI
+        Engine to broadcast the \textit{slowtime\_out} AXI4-Stream data to all
+        of the Image Reconstruction kernels.
+    \item For a total of \textit{RC\_SAMPLES}/16, perform a SIMD vector
+        operation that pops 16 cfloats at a time from the \textit{rc\_in}
+        ping-pong buffer port and push them onto the \textit{rc\_out} ping-pong
+        buffer port.
+    \item Once the \textit{rc\_out} ping-pong buffer has a total of
+        \textit{RC\_SAMPLES} cfloats, the Broadcast kernel now has a full
+        \textit{rc\_out} buffer so it will automatically release lock on the
+        \textit{rc\_out} buffer port and forward that data out from the
+        Broadcast kernel's local memory to all Image Reconstruction kernel
+        memories via an AXI4-Stream burst.
 \end{enumerate}
 
-After the STS kernel has been executed and its \textit{slowtime\_out} and
-\textit{rc\_out} are filled, the output data is sent to all instantiated Image
-Reconstruction kernels.
+\FloatBarrier
+
+\newpage
 
 % =============================================================================
-\subsection{Image Reconstruction Kernel}
+\subsubsection{Pixel Demux Kernel}
+% =============================================================================
+\label{subsec:pixel_demux_kern}
+
+Only one Pixel Demux kernel is instantiated per BP Cluster, as shown in
+Figure~\ref{fig:aie_graph}. The Pixel Demux kernel receives its data from the
+ARM processor via DDR through one GMIO port (\textit{px\_xyz\_in}). It pushes
+its data out via one output port (\textit{px\_xyz\_out}) that feeds into an
+AXI4-Stream splitter switch. The port types for \textit{px\_xyz\_in} and
+\textit{px\_xyz\_out} are both AXI4-Stream data ports. The input and output
+port descriptions for the Pixel Demuxer kernel are listed below:
+
+\begin{itemize}
+    \item \textbf{px\_xyz\_in (float):} AXI4-Stream from the DDR originating
+        from the ARM processor that contains X, Y and Z location of the target
+        pixels of interest with respect to the target image center.
+    \item \textbf{px\_xyz\_out (float):} AXI4-Stream packets that get fed to a
+        AXI4-Stream packet splitter to distribute among all Image
+        Reconstruction kernels in a BP Cluster. The maximum number of
+        AXI4-Stream packets that the splitter can handle, and therefore the
+        maximum number of Image Reconstruction kernels, is 32.
+\end{itemize}
+
+\noindent The following outlines the Pixel Demux operations based on the
+\textit{main} branch after kernel execution:
+
+\begin{enumerate}
+    \item \label{itm:create_header_1} Construct an AXI4-Stream packet header and
+        send it out the \textit{px\_xyz\_out} AXI4-Stream port.
+    \item \label{itm:px_in_px_out_1} Read a float from \textit{px\_xyz\_in}
+        AXI4-Stream and send it out through \textit{px\_xyz\_out} AXI4-Stream.
+    \item \label{itm:demux_repeat_1} Repeat step \ref{itm:px_in_px_out_1} for
+        $(3*PULSES*RC\_SAMPLES)/IMG\_SOLVERS$ times.
+    \item Repeat steps \ref{itm:create_header_1} through
+        \ref{itm:demux_repeat_1} for \textit{IMG\_SOLVERS\_PER\_SWITCH} times.
+\end{enumerate}
+
+\noindent The following outlines the Pixel Demux operations based on the
+\textit{host\_stride} branch after kernel execution:
+
+\begin{enumerate}
+    \item \label{itm:create_header_2} Construct an AXI4-Stream packet header
+        and send it out the \textit{px\_xyz\_out} AXI4-Stream port.
+    \item \label{itm:px_in_px_out_2} Read a float from \textit{px\_xyz\_in}
+        AXI4-Stream and send it out through \textit{px\_xyz\_out} AXI4-Stream.
+    \item \label{itm:demux_inner_repeat_2} Repeat step \ref{itm:px_in_px_out_2}
+        for $48$ times since the Image Reconstruction kernel expects to receive
+        16 floats of X, Y and Z at a time ($16*3=48$).
+    \item \label{itm:demux_middle_repeat_2} Repeat steps
+        \ref{itm:create_header_2} through \ref{itm:demux_inner_repeat_2} for
+        \textit{IMG\_SOLVERS\_PER\_SWITCH} times.
+    \item Repeat steps \ref{itm:create_header_2} through
+        \ref{itm:demux_middle_repeat_2} for \textit{PULSES} times.
+\end{enumerate}
+
+
+\FloatBarrier
+
+\newpage
+% -----------------------------------------------------------------------------
+% Simplified AI Engine Graph with PL DMA stride controller for pre-processing
+% -----------------------------------------------------------------------------
+\begin{figure}[hbtp]
+  \begin{center}
+    \includegraphics[width=1\textwidth]
+    {figures/system_1switch_4aie.png}
+  \end{center}
+  \caption{A scaled-down version of the design showing dataflow between the AI
+      Engine and the PL kernels. There is a total of 1 Data Broadcaster, 1
+      Pixel Demuxer, and 4 Image Reconstruction AI kernels, along with 1 DMA
+      Packet Router PL kernel for AI Engine post-processing and 1 DMA Stride
+  Controller PL kernel for AI Engine pre-processing.}
+  \label{fig:aie_graph_w_stride_ctl}
+\end{figure}
+% -----------------------------------------------------------------------------
+
+The \textit{pl\_stride} branch has a different architecture than the
+\textit{main} or \textit{host\_stride} branches since it uses a DMA Stride
+controller in the PL for pre-processing before data is sent to the AI Engine.
+Figure~\ref{fig:aie_graph_w_stride_ctl} depicts a scaled-down version of the
+dataflow between the AI Engine and the PL kernels. The following outlines the
+Pixel Demux operations based on the \textit{pl\_stride} branch after kernel
+execution:
+
+\begin{enumerate}
+    \item \label{itm:create_header_3} Construct an AXI4-Stream packet header and
+        send it out the \textit{px\_xyz\_out} AXI4-Stream port
+    \item \label{itm:px_in_px_out_3} Perform a SIMD vector operation that pops
+        4 floats (X, Y, Z, and a zero padded number) from the
+        \textit{px\_xyz\_in} AXI4-Stream port and send them out through the
+        \textit{px\_xyz\_out} AXI4-Stream port. The reason a zero pad is used
+        for the 4th float is because the PL optimizes its transfers by sending
+        128bit bursts at a time. The first 96 bits (12 bytes) are the X, Y, and
+        Z target pixels. To keep the data transactions aligned with how the PL
+        fetches data from DDR 64 bits at a time, the last 32 bits (4 bytes) are
+        zero padded.
+    \item \label{itm:demux_repeat_3} Repeat step \ref{itm:px_in_px_out_3} for
+        $16$ times since the Image Reconstruction kernel expects to receive 16
+        X, Y and Z components at a time.
+    \item \label{itm:demux_middle_repeat_3} Repeat steps
+        \ref{itm:create_header_3} through \ref{itm:demux_repeat_3} for
+        \textit{IMG\_SOLVERS\_PER\_SWITCH} times
+    \item Repeat steps \ref{itm:create_header_3} through
+        \ref{itm:demux_middle_repeat_3} for \textit{PULSES} times.
+\end{enumerate}
+
+The following configurations within \textit{design/common.h} were set for the
+\textit{pl\_stride} branch:
+
+\begin{itemize}
+    \item {\boldmath $PULSES = 1$}: Number of pulses to process per iteration
+    \item {\boldmath $RC\_SAMPLES = 64$}: Number of range compression samples to process
+        per iteration
+    \item {\boldmath $AIE\_SWITCHES = 1$}: The number of AXI4-Stream switch
+        splitter/merger pairs. Also known as the number of backprojection
+        clusters (BP Clusters). NOTE: The design is currently only limited to a
+        \textit{AIE\_SWITCHES} value of 1. Future work aims to increase this
+        number, see Section~\ref{sec:future_work} for more information.
+    \item {\boldmath $IMG\_SOLVERS\_PER\_SWITCH = 4$}: The number of Image Reconstruction
+        kernels per BP cluster.
+\end{itemize}
+
+\FloatBarrier
+
+
+% =============================================================================
+\subsubsection{Image Reconstruction Kernel}
 % =============================================================================
 \label{subsec:img_recon_kern}
 
-All Image Reconstruction kernels receive its data from the ARM processor
-through 2 GMIO ports and 2 interconnects from the STS kernel. All Image
-Reconstruction kernels only have a single GMIO output. Both inputs and outputs
-are configured as ping-pong buffers (as opposed to singular buffers or
-streaming interfaces). The inputs and outputs for the Image Reconstruction
-kernel are listed below:
+Image Reconstruction kernels have 4 inputs and 1 output. They receive their
+data from multiple sources, where two of those inputs are buffered, one of the
+inputs is an AXI4-Stream packet, and one of the inputs is an RTP value from the
+ARM processor. The output of the kernel is the focused image and is sent as an
+AXI4-Stream packet to an AXI4-Stream merger switch implemented on the AI
+Engine. See Figure~\ref{fig:aie_graph} or
+Figure~\ref{fig:aie_graph_w_stride_ctl} for a visual representation of data
+flow connections. The inputs and outputs for the Image Reconstruction kernel
+are listed below:
 
 \begin{itemize}
-    \item \textbf{slowtime\_in (4 floats):} Antenna X, Y, Z and range to scene center
-    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Range compressed phase data
-    \item \textbf{xy\_px\_in (\( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \)) cfloats):} X and Y
-        pixels of interest for the target scene, where X is the real component
-        and Y is the imaginary component 
-    \item \textbf{z\_px\_in (\( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \)) floats):} Z pixel of
-        interest for the target scene 
-    \item \textbf{img\_out (\( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \)) floats):} The phase
+    \item \textbf{slowtime\_in (4 floats):} Buffered slowtime data containing
+        the antenna X, Y, Z and range to target scene center.
+    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Buffered range
+        compressed phase data.
+    \item \textbf{px\_xyz\_in (float):} AXI4-Stream packets of X, Y, and Z
+        pixels of interest for the target scene. 
+    \item \textbf{rtp\_dump\_img\_in (int):} RTP from ARM processor. If set to
+        0, the kernel will continue cumulative sum operations for its current
+        execution. If set to 1, the kernel will push the cumulative sum to the
+        AXI4-Stream packet merger which then feeds into the DMA packet router
+        in the PL to sort the packets into specific locations in DDR.
+    \item \textbf{img\_out (cfloat):} AXI4-Stream packets of the phase
         corrected cumulative sum of a partial segment of the total target scene
-        of interest
-    \item \textbf{rtp\_rc\_idx\_offset\_in (1 int):} Not currently used
-    \item \textbf{rtp\_dump\_img\_in (1 int):} RTP from ARM processor. If set
-        to 0, the kernel will continue cumulative sum operations for its
-        current execution. If set to 1, the kernel will push the cumulative sum
-        to the ARM processor after the current execution is finished.
+        of interest.
 \end{itemize}
 
 As mentioned in Section \ref{subsec:aie_graphs}, execution of kernels begin
-when they receive their specified data samples matching their allocated buffer
-size (if using buffers). For the Image Reconstruction kernel, this means the
-following condition must be met for it to execute once:
+when they receive their specified data samples matching their allocated input
+buffer size. Additionally, if an AI kernel uses synchronous RTP's for input,
+then the RTP port must have data sent to it first in order to meet the
+conditions for executing the kernel. For the Image Reconstruction kernel, this
+means the following condition must be met for it to execute once:
 
 \begin{itemize}
-    \item \textit{slowtime\_in} buffer contains 4 floats from STS kernel
-    \item \textit{rc\_in} buffer contains \textit{RC\_SAMPLES} cfloats from STS
-        kernel
-    \item \textit{xy\_px\_in} buffer contains \( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \) cfloats from a GMIO
-        port
-    \item \textit{z\_px\_in} buffer contains \( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}} \) floats from a GMIO port
-    \item \textit{rtp\_rc\_idx\_offset\_in} RTP is passed in from the ARM
-        processor
+    \item \textit{slowtime\_in} buffer contains 4 floats from the Data
+        Broadcast kernel
+    \item \textit{rc\_in} buffer contains \textit{RC\_SAMPLES} cfloats from the
+        Data Broadcast kernel
     \item \textit{rtp\_dump\_img\_in} RTP is passed in from the ARM processor
 \end{itemize}
 
-\noindent Once the Image Reconstruction kernel executes, it performs the following steps:
+\noindent Once the Image Reconstruction kernel executes, it performs the
+following steps:
 
 \begin{enumerate}
-    \item Acquire locks on both \textit{rc\_in} and \textit{img\_out} buffers.
-        Because \textit{rc\_in} and \textit{img\_out} are both asynchronous
-        buffers, the locking and releasing of these buffers must be done
-        manually. NOTE: \textit{rc\_in} no longer needs to be asynchronous.
-    \item \label{itm:xyz_simd} Fetch 16 cfloats from the \textit{xy\_px\_in}
-        buffer and extract the real component 16 floats into its own 16 element
-        X vector and extract the imaginary component 16 floats into its own 16
-        element Y vector. Also fetch 16 floats from the \textit{z\_px\_in}
-        buffer. By storing X, Y, and Z pixels of interest for the target scene
-        in their own 16 element vector registers, simultaneous mathematical
-        operations can be performed on these 16 element vector registers with a
-        single clock cycle (i.e. SIMD).
-    \item \label{itm:diff_range} Calculate the differential range from scene
-        center. This occurs at 16 elements per clock cycle by using the X, Y,
-        and Z pixel vectors from step \ref{itm:xyz_simd}.
+    \item \label{itm:stream_read} Remove the AXI4-Stream header and fetch all
+        target pixels destined for the specific Image Reconstruction kernel
+        through the \textit{px\_xyz\_in} AXI4-Stream packet port. The number of
+        target pixels is based on the equation \( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\). Each element from the
+        AXI4-Stream port is of type \textit{int} and contains the X, Y, and Z
+        target pixel. A \textit{reinterpret\_cast} is performed on the X, Y,
+        and Z data to cast them into floats (since all AXI4-Stream packet data
+        are int types by default) and place the X, Y, and Z floats into their
+        own buffers on the heap of the running AI tile. It is important to read
+        the \textit{px\_xyz\_in} AXI4-Stream packet port as quickly as possible
+        since the Pixel Demux kernel wont continue distributing target
+        pixels to the other Image Reconstruction kernels in the BP cluster
+        until it has fed all the target pixels into the Image Reconstruction
+        kernel that it needs.
+    \item \label{itm:buffer_load} Load 16 elements of X, Y ,and Z into their
+        own vector registers from the target pixel buffers created in step
+        \ref{itm:stream_read}.
+    \item \label{itm:diff_range} Calculate the differential range from the
+        target scene center from the X, Y, and Z vector registers loaded from
+        step \ref{itm:buffer_load}. Processing occurs at 16 pixels per clock
+        cycle.
     \item \label{itm:diff_range_idx} Divide the differential range vector from
         step \ref{itm:diff_range} by the range resolution to get an index
-        vector that can later be used for fetching values from the range
-        compressed buffer (used in step \ref{itm:interp}).
+        vector that can later be used for fetching values from \textit{rc\_in}
+        (used in step \ref{itm:interp}). This index vector is shifted by adding
+        half of \textit{RC\_SAMPLES}; this is done to properly align with the
+        values within the \textit{rc\_in} buffer.
     \item \label{itm:ph_corr} Calculate the phase correction vector for the
         image by multiplying the differential range vector from step
-        \ref{itm:diff_range} by the phase correction coefficient.
-    \item Because the AIE API \textit{sincos\_complex} function only works if
-        the domain is between $-\pi$ and $\pi$ (otherwise the output of the
-        function will be saturated to -1 or 1), the phase correction vector
-        from step \ref{itm:ph_corr} must be scaled up/down by $2\pi$
-        accordingly to fall within $-\pi$ and $\pi$.
+        \ref{itm:diff_range} by the phase correction coefficient. NOTE: Because
+        the AI Engine API \textit{sincos\_complex} function only works if the
+        domain is between $-\pi$ and $\pi$, the phase correction vector from
+        step \ref{itm:ph_corr} must be scaled up/down by $2\pi$ accordingly to
+        fall within $-\pi$ and $\pi$. If the domain of \textit{sincos\_complex}
+        is not between $-\pi$ and $\pi$, the output of the function will be
+        saturated to -1 or 1 depending on if the input value is below $-\pi$ or
+        above $\pi$ respectively.
     \item \label{itm:interp} Because step \ref{itm:diff_range_idx} results in
-        fractional numbers, both the closest lower and upper whole number
-        indices are derived. These integer indices are used to fetch values
-        from the range compressed (\textit{rc\_in}) buffer one at a time
-        (vector operations are no longer used at this point since indexing into
-        buffers can only be done one element at a time). Linear interpolation
-        between the two fetched values of the \textit{rc\_in} buffer provides a
-        more accurate representation of the signal at the desired fractional
-        index.
+        an index vector with fractional numbers, both the closest lower and
+        upper whole number indices are derived. These integer indices are used
+        to fetch two values from the range compressed buffer (\textit{rc\_in})
+        in order to perform linear interpolation in order to provide a more
+        accurate representation of the signal at the desired fractional index.
+        NOTE: Indexing into the \textit{rc\_in} buffer is done \textbf{one at a
+        time} instead of using SIMD vector operations. The algorithm breaks
+        convention of using SIMD vector operations since the AI Engine API only
+        support single value indexing into buffers at the time of writing; this
+        results in a large performance hit to the algorithm. Performance
+        improvements like this are reserved for future work. See
+        Section~\ref{sec:future_work} for more details.
     \item \label{itm:px} Take the single interpolated range compressed value
         from step \ref{itm:interp} and multiply it by the phase corrected value
-        from step \ref{itm:ph_corr} to get the phase corrected pixel in the image.
+        from step \ref{itm:ph_corr} to get the phase corrected pixel in the
+        image.
     \item \label{itm:img} Cumulatively add the pixel from step \ref{itm:px}
-        into an image array stored in the heap of the AIE tile. This Image
-        array persists across multiple invocations of the kernel. 
+        into an image buffer stored in the heap of the AI Engine tile. This
+        Image buffer persists across multiple invocations of the kernel. 
     \item \label{itm:inner_loop} Repeat steps \ref{itm:interp} through
         \ref{itm:img} for a total of 16 times to loop through all of the
         indices within the index vector from step \ref{itm:diff_range_idx}.
-    \item Repeat steps \ref{itm:xyz_simd} through \ref{itm:inner_loop} for a
+        NOTE: See note in step \ref{itm:interp} for why this loop is needed.
+    \item Repeat steps \ref{itm:buffer_load} through \ref{itm:inner_loop} for a
         total of \( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS} \times 16 }\) times for all
-        of the X, Y, and Z pixels of interest within the \textit{xy\_px\_in} and
-        \textit{z\_px\_in} buffers.
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\) times for all of the X,
+        Y, and Z pixels of interest within the \textit{px\_xy\_in} buffer.
     \item A single invocation of the Image Reconstruction kernel is completed.
         However, the \textit{img\_out} buffer (intended for transferring the
         final focused image to the ARM processor) remains unwritten at this
         point. This is because the kernel must be invoked \textit{PULSES} times
-        to fully focus the image across all pulses. In each invocation, the ARM
-        processor provides updated slowtime data and range compressed samples
-        (prepared by the STS kernel as described in Section
-        \ref{subsec:sts_kern}). During the final pulse, the ARM processor
-        signals the Image Reconstruction kernel to write the accumulated
-        focused image to the \textit{img\_out} buffer for the last invocation
-        by setting the \textit{rtp\_dump\_img\_in} RTP value to 1.
+        to fully focus the image across all pulses. In each invocation, the
+        Data Broadcast kernel provides updated slowtime data and range
+        compressed samples. See \ref{subsec:data_broadcasting_kern} for more
+        information on the Data Broadcast kernel. During the final pulse, the
+        ARM processor signals the Image Reconstruction kernel to write the
+        accumulated focused image to the \textit{img\_out} buffer for the last
+        invocation by setting the \textit{rtp\_dump\_img\_in} RTP value to 1.
 \end{enumerate}
 
-After the Image Reconstruction kernels has been executed \textit{PULSES} times,
-the ARM processor will read out all Image Reconstruction kernel's
-\textit{img\_out} buffer in a specific way to stitch together the total focused
-image.
 
 % =============================================================================
-\subsection{AIE Graph Implementation}
+\subsubsection{PL DMA Packet Router Kernel}
+% =============================================================================
+\label{subsec:pl_pkt_router_kern}
+
+The DMA Packet Router PL kernel is written in High-Level Synthesis (HLS), which
+allows the developer to write C/C++ and compile the code into synthesizable
+code for the FPGA. After the Image Reconstruction kernels have been executed
+\textit{PULSES} times and they send out their focused segments of the image
+through \textit{img\_out} AXI4-Stream packets, a PL DMA Packet Router kernel
+will receive the stream from each Image Reconstruction kernel within a BP
+cluster and stitch them together in an ordered way before placing them in DDR.
+This will allow the ARM processor to read from DDR contiguously to see the
+total focused image from each Image Reconstruction kernel contribution.
+
+\noindent The inputs and outputs for the DMA Packet Router PL kernel are listed
+below:
+
+\begin{itemize}
+    \item \textbf{pl\_stream\_in:} AXI4-Stream packets of the phase corrected
+        cumulative sum of a partial segment of the total target scene of
+        interest.
+    \item \textbf{ddr\_mem:} Pointer to the 64bit DDR memory address space.
+\end{itemize}
+
+\noindent The DMA Packet Router PL kernel performs the following steps:
+
+\begin{enumerate}
+    \item \label{itm:pl_rtr_outer_loop} Read in first 128 bits of the
+        AXI4-Stream packet, which will contain the packet header metadata.
+        NOTE: The first 32 bits of this packet header contains the packet id,
+        packet type, AI Engine tile source row, AI Engine tile source column,
+        and the odd parity of bits 0-30. See \cite{AMD_Versal_UG1079} for more
+        information on this packet header. The next 32 bits is the instance ID
+        of the kernel that generated the AXI4-Stream packet. Bits 64-128 are
+        padding and ignored. In the future, this could be used for additional
+        metadata.
+    \item \label{itm:pl_rtr_ddr_offset} Calculate the DDR offset location for
+        placing the AXI4-Stream packet by taking the instance ID from the
+        header, and multiplying it by the number of samples (\(
+        \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\)) given to each Image
+        Reconstruction kernel.
+    \item \label{itm:pl_rtr_inner_loop} Read another 128 bits of the
+        AXI4-Stream packet and place that image data at the specified offset
+        derived in step \ref{itm:pl_rtr_ddr_offset}.
+    \item \label{itm:pl_rtr_repeat} Repeat step \ref{itm:pl_rtr_inner_loop} for
+        \( \frac{\textit{PULSES} \times
+        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\) times
+    \item Repeat steps \ref{itm:pl_rtr_outer_loop} through
+        \ref{itm:pl_rtr_repeat} for \textit{IMG\_SOLVERS\_PER\_SWITCH} times
+\end{enumerate}
+
+In order for this PL kernel to be integrated into the Vivado design and a
+complete XSA file be generated, the Vitis toolchain requires a system.cfg file
+that specifies how the PL kernel is connected to the rest of the system. Prior
+to the PL kernel being built, the Makefile will automatically update this
+\textit{design/system\_cfg/system.cfg} file based on how the design is
+configured within the \textit{design/common.h}.
+
+% =============================================================================
+\subsubsection{PL DMA Stride Controller Kernel}
+% =============================================================================
+\label{subsec:pl_stride_kern}
+
+
+In order for this PL kernel to be integrated into the Vivado design and a
+complete XSA file be generated, the Vitis toolchain requires a system.cfg file
+that specifies how the PL kernel is connected to the rest of the system. Prior
+to the PL kernel being built, the Makefile will automatically update this
+\textit{design/system\_cfg/system.cfg} file based on how the design is
+configured within the \textit{design/common.h}.
+
+% =============================================================================
+\subsection{AI Engine Graph Implementation}
 % =============================================================================
 \label{subsec:graph_impl}
 
-An AIE design must include a dataflow graph that guides the AIE compiler in
-interconnecting kernels internally and linking them to external domains within
-the Versal chip. For more information on AIE graphs, see Section
-\ref{subsec:aie_graphs}.
+An AI Engine design must include a dataflow graph that guides the AI Engine
+compiler in interconnecting kernels internally and linking them to external
+domains within the Versal chip. For more information on AI Engine graphs, see
+Section \ref{subsec:aie_graphs}.
 
 The general flow of data originates from the ARM processor. The ARM processor
-provides the antenna X, Y, and Z coordinates, as well as the range to scene
-center from the antenna and the range compressed samples to the STS kernel. Due
-to the limited number of GMIO input ports (max of 32), the graph is configured
-to forward this data to the STS kernel and that graph broadcasts the STS kernel
-output to all Image Reconstruction kernels.
-
-Data originates from the ARM processor, which provides the STS kernel with
-antenna X, Y, and Z coordinates, range to scene center, and range-compressed
-samples. Due to the GMIO's limited input ports (maximum 32), the AIE graph was
-designed to utilize broadcasting to efficiently stream this data from the STS
-kernel to all Image Reconstruction kernels. However, a separate challenge
-arises with the target scene pixel coordinates for the scene of interest. Each
-Image Reconstruction kernel needs its own unique set of these pixel coordinates
-so it can focus its own unique portion of the overall image. Currently, this
-data is directly transmitted from the ARM processor to each Image
-Reconstruction kernel since the data distribution from the ARM processor is
-easier round-robin to the appropriate kernels. However, this direct
-communication approach poses a significant limitation: each Image
-Reconstruction kernel consumes two additional GMIO ports (one GMIO for X/Y and
-one for Z). Consequently, only eight Image Reconstruction kernels can be used
-alongside a single STS kernel within the 32-port limit (totaling 21 GMIO
-inputs). While 11 GMIO ports remain unused, the system's reliance on SIMD
-processing (handling 16 elements simultaneously) restricts the number of Image
-Reconstruction kernels to powers of two. The next power of two (16  Image
-Reconstruction kernels) would equal a total of 37 GMIO input ports needed for
-the graph design, exceed the available input GMIO ports. To address this
-limitation and allow for a greater number of Image Reconstruction kernels, a
-more sophisticated solution is needed than simple direct communication. Future
-work aims to eliminate all GMIO ports going into and out of Image
-Reconstruction kernels so they can be instantiated 100's of times over to
-handle much higher workloads in parallel. See Section \ref{sec:future_work} for
-possible ways of achieving this. 
-
-The Vitis Analyzer tool was used to generate a block diagram of the designed
-AIE graph (shown in figure \ref{fig:aie_graph}).
-
-% -----------------------------------------------------------------------------
-% AIE Graph
-% -----------------------------------------------------------------------------
-\begin{figure}[hbtp]
-  \tiny
-  \begin{center}
-    \includesvg[width=0.7\textwidth]{figures/aie_5_kern_rc_broadcasting.svg}
-  \end{center}
-  \caption{AIE graph with 1 Slowtime Splicer and 4 Image Reconstruction 
-  kernels.}
-  \label{fig:aie_graph}
-\end{figure}
-
-% -----------------------------------------------------------------------------
-
-
+provides the range compressed samples and the slow time data, which consists of
+the antenna X, Y, and Z coordinates, as well as the range to target scene from
+the antenna. In order to reduce the number of GMIO inputs being used (max of
+32), all slow time data is sent through the same GMIO input port. The graph is
+configured to forward this data to the Data Broadcast kernel and that graph
+code is written to broadcast the Data Broadcast kernel output to all Image
+Reconstruction kernels. The Vitis Analyzer tool was used to generate a block
+diagram of the designed AI Engine graph, which can be seen in
+Figure~\ref{fig:aie_graph} and \ref{fig:aie_graph_w_stride_ctl}.
 
 
 

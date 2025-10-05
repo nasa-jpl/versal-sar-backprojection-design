@@ -1,5 +1,5 @@
 % -----------------------------------------------------------------------------
-% versal_sar_backproject.txt
+% versal_sar_backproject.tex
 %
 % 2/10/2025 Austin Owens (austin.t.owens@jpl.nasa.gov)
 %
@@ -30,12 +30,19 @@
 \usepackage{pdflscape}
 \usepackage{svg}
 
+% Captions
+\usepackage[font=footnotesize,labelfont=bf,skip=1pt]{caption}
+
+% Sections
+\usepackage[section]{placeins}
+
 % Misc packages
 \usepackage{verbatim}
 \usepackage{dcolumn}
 \usepackage{ifpdf}
 %\usepackage{enumerate}
 \usepackage{enumitem}
+
 
 % PDF Bookmarks and hyperref stuff
 \usepackage[
@@ -164,7 +171,8 @@
 %
 \begin{document}
 \title{SAR Backprojection on AMD Versal ACAP}
-\author{Austin Owens (austin.t.owens@jpl.nasa.gov)}
+\author{Austin Owens (\texttt{\href{mailto:austin.t.owens@jpl.nasa.gov}{austin.t.owens@jpl.nasa.gov}}) \and
+        David Hawkins (\texttt{\href{mailto:david.w.hawkins@jpl.nasa.gov}{david.w.hawkins@jpl.nasa.gov}})}
 \date{\today}
 
 % Title page

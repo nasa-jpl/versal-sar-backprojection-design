@@ -5,9 +5,10 @@
 
 
 \subsection{Parallelism and Data Transfer}
+\label{sec:parallelism_and_data_trans}
 
 % -----------------------------------------------------------------------------
-% AIE Array
+% AI Engine Array
 % -----------------------------------------------------------------------------
 \begin{figure}[hbtp]
   \begin{center}
@@ -19,9 +20,9 @@
 \end{figure}
 % -----------------------------------------------------------------------------
 
-AI Engines (AIEs) are an array of very-long instruction word (VLIW) processors
-with single instruction multiple data (SIMD) vector units that are highly
-optimized for compute-intensive applications \cite{AMD_Versal_UG1079}. The AIE
+AI Engines are an array of very-long instruction word (VLIW) processors with
+single instruction multiple data (SIMD) vector units that are highly optimized
+for compute-intensive applications \cite{AMD_Versal_UG1079}. The AI Engine
 array supports three levels of parallelism:
 
 \begin{itemize}
@@ -30,120 +31,177 @@ array supports three levels of parallelism:
         clock cycle.
     \item \textbf{SIMD:} Through vector registers allowing multiple elements
         to be computed in parallel.
-    \item \textbf{Multicore:} Through the AIE array, allowing up to 400 AIE
-        tiles to execute in parallel.
+    \item \textbf{Multicore:} Through the AI Engine array, allowing up to 400
+        AI Engine tiles to execute in parallel.
 \end{itemize}
 
-Additionally, there are multiple ways to move data within the AIE tiles, as
-well as into and out of them. Figure \ref{fig:aie_array} highlights some of
-these data transfer mechanisms. The following list provides a more
-comprehensive overview:
+Additionally, the AI Engine tiles provide multiple mechanisms to store,
+pipeline, and move data. Figure~\ref{fig:aie_array} highlights several of these
+data-transfer mechanisms. The following list gives a more complete overview:
 
 \begin{itemize}
-    \item \textbf{Local Memory} - Each tile has 32 KB of data memory for
-        runtime data.
-    \item \textbf{Neighbor Memory Sharing} - A tile can directly access its
-        adjacent tiles’ memory via hardware locks, expanding effective local
-        storage \cite{AMD_Versal_UG1079}.
-    \item \textbf{Cascade Ports} - A dedicated link between adjacent AI Engine
-        tiles’ MAC accumulator outputs, used to pass partial sums or
-        intermediate results. This path bypasses AXI4 Stream and local memory,
-        offering minimal latency for chained computations.
-    \item \textbf{AXI4 Stream (Tile-to-Tile)} - General-purpose streaming
-        interfaces inside the AI Engine array, typically 32 bits wide per port,
-        supporting handshake signals (TVALID, TREADY).
-    \item \textbf{Programmable Logic Input/Output (PLIO) Ports} - AXI4 Stream
-        connections from the AI Engine array to the FPGA fabric (32, 64, or 128
-        bits wide at the interface boundary).
-    \item \textbf{Global Memory Input/Output (GMIO) Ports} - Ports to funnel
-        data from external DDR (via the NoC) into the AI Engine array, or
-        vice-versa. Operates at 64B, 128B, 256B bursts.
-    \item \textbf{Memory-Mapped Access (NoC)} - For control or lower-bandwidth
-        data transfers, the NoC can directly read/write local memory or
-        configure DMA descriptors with AXI memory-mapped transactions.
+  \item \textbf{Local memory} - Each tile has 32\,KB of data memory for runtime
+      buffers.
+  \item \textbf{Neighbor memory sharing} - A tile can directly access adjacent
+      tiles’ memories with hardware locks for coordination, effectively
+      expanding local storage~\cite{AMD_Versal_UG1079}.
+  \item \textbf{Cascade ports} - Dedicated links between adjacent AI Engine
+      tiles’ multiply-accumulate (MAC) accumulators used to pass partial sums
+      or intermediate results. This path bypasses AXI4-Stream and local memory
+      for low-latency chained computations.
+  \item \textbf{AXI4-Stream (tile-to-tile)} - General-purpose streaming
+      interfaces inside the AI Engine array (typically 32 bits per port) with
+      handshake signals (\textit{TVALID}, \textit{TREADY}, and often
+      \textit{TLAST} for frame boundaries).
+  \item \textbf{PLIO ports} - AXI4-Stream connections between the AI Engine
+      array and the Programmable Logic (PL); commonly 32, 64, or 128 bits wide
+      at the interface boundary.
+  \item \textbf{GMIO ports} - Interfaces that move data between external DDR
+      (via the NoC) and the AI Engine array. Support burst transfers (e.g.,
+      64/128/256\,B).
+  \item \textbf{Memory-mapped access (NoC)} - For control or lower-bandwidth
+      data movement, the NoC can read/write local memories and configure DMA
+      descriptors using AXI memory-mapped transactions.
 \end{itemize}
 
-\subsection{AIE Kernels}
+\subsection{AI Engine Kernels}
 \label{subsec:aie_kernels}
 
-An AIE kernel is a C/C++ program which is written using specialized APIs that
-target the VLIW vector processor. The AIE kernel code is compiled using the AIE
-compiler that is included in the AMD Vitis™ core development kit. The AIE
-compiler compiles the kernels to produce an ELF file that is run on the AIE
-processors. Up to two kernels can be configured to run on a single AIE tile by
-specifying a runtime ratio for the kernel. The AIE compiler will typically
-determine while kernels get paired together on an AIE tile based on their
-associated runtime configuration.
 
-While most standard C/C++ code can be compiled for the AIE, the code might need
-restructuring to take full advantage of the parallelism provided by the
-hardware. The power of a single AIE tile is in its ability to execute a
-multiply-accumulate (MAC) operation using two vectors, load two vectors for the
-next operation, store a vector from the previous operation, and increment a
-pointer or execute another scalar operation in each clock cycle. If these
-mechanisms are not taken advantage of within the C/C++ code, the overall
-performance of the design will be compromised.
+\subsubsection{Overview}
+\label{subsubsec:overview}
+
+An AI Engine kernel is a C/C++ function written with the AI Engine API that
+targets the VLIW vector processor in each AI Engine tile. Arrays range from
+tens to hundreds of tiles depending on the device; for example, the AI Core
+VC1902 integrates 400 AI Engine tiles~\cite{AMD_Versal_DS946}. Kernels are
+compiled with the Vitis AI Engine compiler into ELF images, which the graph
+runtime loads onto the assigned tiles. Based on the user-specified runtime
+ratio and available resources, the compiler may co-locate two kernels to
+time-share a tile. If not, it assigns one kernel to the tile.
+
+\subsubsection{SIMD}
+\label{subsubsec:simd}
+
+Although most conventional C/C++ will compile, kernels usually need
+restructuring to expose vector and instruction-level parallelism. In practice
+we express arithmetic with AI Engine intrinsics such as \verb|aie::add()|,
+\verb|aie::sub()|, and \verb|aie::mul()|, while local data storage and
+retrieval is handled explicitly with vector stores and loads (e.g.,
+\verb|aie::store_v<N>()| and \verb|aie::load_v<N>()|)~\cite{AMD_Versal_UG1079}.
+These intrinsics convey SIMD intent, operate on vector types held in the tile’s
+vector registers, and help the compiler generate packed stores/loads and fused
+multiply–accumulate sequences. Without this structure, code is often scalarized
+by the compiler, underutilizing the vector hardware.
+
+\subsubsection{Pipelining and Data Movement}
+\label{subsubsec:pipelining_and_data_movement}
 
 
-\subsection{AIE Graphs}
+Loop-level pipelining in an AI Engine kernel relies on careful loop structure
+and buffering. For example, using ping-pong (double) buffers or circular
+buffers allows one memory block to be used for computing while the other is
+loaded or stored, effectively overlapping memory access with computation. When
+buffers are aligned and accessed contiguously, the compiler can issue one
+vector multiply–accumulate per cycle (subject to memory-port bandwidth) by
+preloading operands for the next iteration while writing results from the prior
+one. Developers can also guide the compiler with the
+\verb|chess_prepare_for_pipelining| directive, which prompts the AI Engine
+compiler to create an overlapped (software-pipelined)
+schedule~\cite{AMD_Versal_UG1079}. By contrast, High-Level Synthesis (HLS)
+pipeline pragmas like \texttt{\#pragma HLS PIPELINE II=1} target PL kernels and
+are not used for AI Engine kernels. These loop and buffering patterns let the
+compiler overlap loads, computation, and stores; without such structuring,
+kernels often stall on memory rather than keeping the AI Engine’s resources
+busy.
+
+
+\subsubsection{Buffer and Stream Interfaces}
+\label{subsubsec:buffer_and_stream_inf}
+
+AI Engine kernels can exchange data through either buffer ports or stream
+ports. A buffer port maps to a contiguous block of local tile memory that
+serves as the kernel’s input or output. A synchronous buffer port blocks until
+the entire block is available (for inputs) or consumed (for outputs) before the
+kernel proceeds~\cite{AMD_Versal_UG1079}. If multiple synchronous input buffers
+are declared, the kernel will not fire until all are ready. By contrast, an
+asynchronous buffer port (declared with \texttt{async} in the buffer type name)
+does not automatically block. Instead, the kernel code explicitly locks and
+releases the buffer to control when data is accessed, giving the designer more
+flexibility but also the responsibility for synchronization.
+
+Alternatively, a kernel can use AXI-stream interfaces for continuous data flow.
+With streams, the kernel can keep reading or writing beats of data without
+waiting for a full block. AI Engine graphs support bi-directional stream ports
+(and dedicated cascade streams between neighbors) that run at full
+bandwidth~\cite{AMD_Versal_UG1079}. In effect, streaming ports create an
+endless data pipeline: as soon as data is available on the stream, the kernel
+can process it beat-by-beat. For example, a PL-side AXI stream input can feed
+into the AI Engine via a PLIO port, and the kernel’s code can simply advance a
+stream iterator each cycle.
+
+\subsection{AI Engine Graphs}
 \label{subsec:aie_graphs}
 
+An AI Engine program is organized around a dataflow graph written in C++ with
+the Adaptive Data Flow (ADF) API. This graph defines kernels, ports, and the
+connections between them (Figure~\ref{fig:aie_graph}). The ADF graph can
+interface with the programmable logic (PL), global memory, and the host
+processor using specialized ports, such as:
 
-An AIE program requires a Data Flow Graph (DFG) specification in C++, known as
-an Adaptive Data Flow (ADF) graph. This graph defines a network of one or more
-AIE kernels connected by data streams. Figure \ref{fig:aie_graph} shows an
-example of such a graph.
+\begin{itemize}
+\item \textit{input\_plio} and \textit{output\_plio}: AXI-stream connections to
+    and from the PL.
+\item \textit{input\_gmio} and \textit{output\_gmio}: memory-mapped DMA
+    connections to and from global memory (e.g., DDR).
+\item Runtime Parameter (RTP): passes runtime parameter data to AI Engine
+    kernels (primarily for passing single values or small arrays).
+\end{itemize}
 
-The ADF graph interfaces with the programmable logic (PL), global memory, and
-the host processor through dedicated constructs. For example, the
-\textit{input\_plio} and \textit{output\_plio} port objects enable streaming
-connections to and from the PL, while the \textit{input\_gmio} and
-\textit{output\_gmio} port objects provide memory-mapped connections to global
-memory (e.g. DDR). Additionally, Runtime Parameter (RTP) objects allow you to
-set up and control kernel parameters during graph execution.
+At runtime, the Vitis toolchain manages data movement across these connections.
+For buffer connections, it automatically implements double-buffering (e.g.,
+ping–pong buffers) so that kernels can compute on one block while the next
+block is being filled. For stream connections, data flows continuously without
+explicit buffering.
 
-A graph can include multiple kernels and various input/output ports. Kernels
-are connected to each other and to these ports via defined connections.
-Execution begins once the required data samples—matching the buffer or stream
-sizes expected by the kernels—are available, and the graph produces output
-samples accordingly \cite{AMD_Versal_UG1079}.
+Graph execution follows a Kahn process-network model where each kernel fires
+only when its inputs are ready, making kernel execution data-driven. This
+enables concurrency across the graph where one kernel may compute while another
+loads the next data block and a third writes results. Together with loop-level
+pipelining inside kernels, graph-level concurrency maximizes throughput across
+the AI Engine array.
 
-Internally, the interconnections between AIE tiles use an AXI4 Stream fabric.
-However, from the developer’s perspective, these connections can be treated
-either as continuous streams or as buffer-based windows. In buffer mode
-(window-based I/O), the AIE toolflow abstracts the underlying AXI4 Stream
-mechanism by requiring that an entire buffer be filled before the kernel can
-process or release the data to the next stage.
+\newpage
 
-\subsection{AIE Specification Quick Reference}
+\subsection{AI Engine Specification Quick Reference}
 \label{subsec:quick_ref}
 
 \begin{itemize}[parsep=1em]
-    \item GMIO Ports (DDR $\leftrightarrow$ NoC $\leftrightarrow$ AIE)
+    \item GMIO Ports (DDR $\leftrightarrow$ NoC $\leftrightarrow$ AI Engine)
         \begin{itemize}[topsep=0em]
             \item 32 GMIO input ports at the graph/system level
             \item 32 GMIO output ports at the graph/system level
             \item Common NoC burst sizes: 64B, 128B, or 256B.
         \end{itemize}
 
-    \item PLIO Ports ($PL \leftrightarrow AIE$)
+    \item PLIO Ports ($PL \leftrightarrow AI Engine$)
         \begin{itemize}[topsep=0em]
             \item Configurable bus widths: 32b, 64b, or 128b.
-            \item 32 bits per AIE clock (i.e. each 32b take 1 clk cycle for
-                AIE)
+            \item 32 bits per AI Engine clock (i.e. each 32b take 1 clk cycle
+                for AI Engine)
         \end{itemize}
 
     \item Clocks
         \begin{itemize}[topsep=0em]
-            \item AIE clock: approximately 1.25 GHz (device and speed-grade
-                dependent).
+            \item AI Engine clock: approximately 1.25 GHz (device and
+                speed-grade dependent).
             \item NoC clock: approximately 1.0 GHz.
             \item PL clocks: approximately 500 MHz (but can vary widely).
             \item Arm Cortex-A72: approximately 1.35 GHz (also
                 device-dependent).
         \end{itemize}
 
-    \item AIE Tile Local Data Memory
+    \item AI Engine Tile Local Data Memory
         \begin{itemize}[topsep=0em]
             \item 32 KB total per tile for runtime data:
                 \begin{itemize}[topsep=0em]
@@ -170,7 +228,7 @@ process or release the data to the next stage.
                 32 KB data memory).
         \end{itemize}
 
-    \item AIE AXI4 Stream I/O
+    \item AI Engine AXI4 Stream I/O
         \begin{itemize}[topsep=0em]
             \item Up to 2 input and 2 output streaming ports, each 32 bits
                 wide, 1 word/cycle.
@@ -179,7 +237,8 @@ process or release the data to the next stage.
         \end{itemize}
 \end{itemize}
 
-These characteristics apply to AIE (V1) devices, not the newer AIE-ML variants,
-which differ in memory size, clock domains, and additional ML extensions.
+These characteristics apply to AI Engine (V1) devices, not the newer AI
+Engine-ML variants, which differ in memory size, clock domains, and additional
+ML extensions.
 
 
