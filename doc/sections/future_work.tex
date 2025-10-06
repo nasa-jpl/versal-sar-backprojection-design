@@ -3,24 +3,26 @@
 % =============================================================================
 \label{sec:future_work}
 
-- More AIE kernels for processing:
-    - Pixel target generation inside AIE kernels
-    - Pixel target generation from PL to AIE
-    - Have the STS kernel take the pixels from the host and round robin them to
-    the AIE
-    - Build another kernel (separate from the STS) be the arbiter to round
-    robin to the AIE from the processor
-- Increase number of RC\_SAMPLES and PULSES
-    - This may be possible if we can not do ping-pong buffers but singular buffers
-    - Also should look into utilizing memory from neighboring tiles (not sure
-    if that is facilitated for you by the tools or you have to manually invoke
-    that)
-- Incorporating more ILP for further performance optimization.
-- Implement stripmap imaging mode
-- Utilizing FPGA/DSP
-- All RC samples don't need to be passed to all image reconstruction kernels
-because these kernels only need some subset of the range compressed samples.
-This was the intention for the rtp\_rc\_idx\_offset\_in RTP value
+Placeholder for future work.
+
+%- More AIE kernels for processing:
+%    - Pixel target generation inside AIE kernels
+%    - Pixel target generation from PL to AIE
+%    - Have the STS kernel take the pixels from the host and round robin them to
+%    the AIE
+%    - Build another kernel (separate from the STS) be the arbiter to round
+%    robin to the AIE from the processor
+%- Increase number of RC\_SAMPLES and PULSES
+%    - This may be possible if we can not do ping-pong buffers but singular buffers
+%    - Also should look into utilizing memory from neighboring tiles (not sure
+%    if that is facilitated for you by the tools or you have to manually invoke
+%    that)
+%- Incorporating more ILP for further performance optimization.
+%- Implement stripmap imaging mode
+%- Utilizing FPGA/DSP
+%- All RC samples don't need to be passed to all image reconstruction kernels
+%because these kernels only need some subset of the range compressed samples.
+%This was the intention for the rtp\_rc\_idx\_offset\_in RTP value
 
 
 % NOTEEEEE!!!!! WHEN SHOWING THE PL STRIDE CONTROLLER AIE GRAPH, I NEED TO

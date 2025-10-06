@@ -26,7 +26,9 @@ backprojection reconstruction.
 In this work, Gorham’s mathematical formulation and dataset are mapped onto
 Versal hardware to evaluate parallelization strategies. Focused images produced
 by the AI Engine implementation are compared against the MATLAB reference
-outputs.
+outputs. Appendix \ref{sec:matlab_appendix} contains more information on how the
+MATLAB code was used and how the dataset was used to generate the input data
+for the AI Engine.
 
 The following sections describe how this algorithm and dataset are mapped onto
 the Versal ACAP architecture, including the division of responsibilities across
@@ -449,7 +451,7 @@ The following configurations within \textit{design/common.h} were set for the
         splitter/merger pairs. Also known as the number of backprojection
         clusters (BP Clusters). NOTE: The design is currently only limited to a
         \textit{AIE\_SWITCHES} value of 1. Future work aims to increase this
-        number, see Section~\ref{sec:future_work} for more information.
+        number (see Section~\ref{sec:future_work} for more information).
     \item {\boldmath $IMG\_SOLVERS\_PER\_SWITCH = 4$}: The number of Image Reconstruction
         kernels per BP cluster.
 \end{itemize}
@@ -505,7 +507,7 @@ means the following condition must be met for it to execute once:
 \end{itemize}
 
 \noindent Once the Image Reconstruction kernel executes, it performs the
-following steps:
+following steps within the \textit{main} branch:
 
 \begin{enumerate}
     \item \label{itm:stream_read} Remove the AXI4-Stream header and fetch all
@@ -523,7 +525,7 @@ following steps:
         pixels to the other Image Reconstruction kernels in the BP cluster
         until it has fed all the target pixels into the Image Reconstruction
         kernel that it needs.
-    \item \label{itm:buffer_load} Load 16 elements of X, Y ,and Z into their
+    \item \label{itm:buffer_load} Load 16 elements of X, Y, and Z into their
         own vector registers from the target pixel buffers created in step
         \ref{itm:stream_read}.
     \item \label{itm:diff_range} Calculate the differential range from the
@@ -570,7 +572,7 @@ following steps:
         \ref{itm:img} for a total of 16 times to loop through all of the
         indices within the index vector from step \ref{itm:diff_range_idx}.
         NOTE: See note in step \ref{itm:interp} for why this loop is needed.
-    \item Repeat steps \ref{itm:buffer_load} through \ref{itm:inner_loop} for a
+    \item \label{itm:main_loop} Repeat steps \ref{itm:buffer_load} through \ref{itm:inner_loop} for a
         total of \( \frac{\textit{PULSES} \times
         \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\) times for all of the X,
         Y, and Z pixels of interest within the \textit{px\_xy\_in} buffer.
@@ -587,6 +589,16 @@ following steps:
         invocation by setting the \textit{rtp\_dump\_img\_in} RTP value to 1.
 \end{enumerate}
 
+The \textit{host\_stride} and \textit{pl\_stride} branches have similar steps
+as above. The only difference is step \ref{itm:stream_read} is no longer
+performed and step \ref{itm:buffer_load} reads the target pixels directly from
+the AXI4-Stream \textit{px\_xyz\_in} port in 16 pixel increments. The loop in
+step \ref{itm:main_loop} encompasses the above step so that 16 pixels will be
+fetched from the \textit{px\_xyz\_in} stream every iteration. This allows the
+Pixel Demuxer kernel to Round-Robin 16 pixels at a time to each Image
+Reconstruction kernel, then loop back to the first Image Reconstruction kernel
+to repeat the round-robin until all pixels that are fed into the Pixel Demuxer
+kernel are dispersed.
 
 % =============================================================================
 \subsubsection{PL DMA Packet Router Kernel}
@@ -601,7 +613,9 @@ through \textit{img\_out} AXI4-Stream packets, a PL DMA Packet Router kernel
 will receive the stream from each Image Reconstruction kernel within a BP
 cluster and stitch them together in an ordered way before placing them in DDR.
 This will allow the ARM processor to read from DDR contiguously to see the
-total focused image from each Image Reconstruction kernel contribution.
+total focused image from each Image Reconstruction kernel contribution. See
+Figure~\ref{fig:aie_graph} for a graph depicting the dataflow using the DMA
+Packet Router PL kernel.
 
 \noindent The inputs and outputs for the DMA Packet Router PL kernel are listed
 below:
@@ -653,11 +667,93 @@ configured within the \textit{design/common.h}.
 % =============================================================================
 \label{subsec:pl_stride_kern}
 
+Similar to the DMA Packet Router PL kernel, the DMA Stride Controller PL kernel
+is written in HLS. This PL kernel is only utilized within the
+\textit{pl\_stride} branch and is only used for feeding the Pixel Demux kernel
+with pre-sorted target pixel data from DDR. This has the following
+implications:
 
-In order for this PL kernel to be integrated into the Vivado design and a
-complete XSA file be generated, the Vitis toolchain requires a system.cfg file
-that specifies how the PL kernel is connected to the rest of the system. Prior
-to the PL kernel being built, the Makefile will automatically update this
+\begin{enumerate}
+    \item The Pixel Demux kernel Round-Robins 16 target pixels at a time to
+        each Image Reconstruction kernel within the BP Cluster until there are
+        no more target pixels. This is as opposed to dumping the entire set of
+        pixels destined for a specific Image Reconstruction kernel all at once.
+    \item The Image Reconstruction kernels can start work as soon as receiving
+        16 target pixels as opposed to waiting for all target pixels to be
+        collected.
+    \item More Image Reconstruction kernels can begin working in parallel
+        sooner since the Image Reconstruction kernels do not need to wait for
+        the Pixel Demux kernel to fully feed the prior Image Reconstruction
+        kernel with all its required target pixels at one time.
+\end{enumerate}
+
+\noindent The inputs and outputs for the DMA Stride Controller PL kernel are
+listed below:
+
+\begin{itemize}
+    \item \textbf{ddr\_mem:} Pointer to the 64bit DDR memory address space.
+    \item \textbf{pl\_stream\_out:} AXI4-Stream of the target pixels extracted
+        from DDR memory. This AXI4-Stream feeds into the Pixel Demux kernel.
+\end{itemize}
+
+\noindent The role of the DMA Stride Controller PL kernel performs the following steps:
+
+\begin{enumerate}
+    \item \label{itm:pl_stride_inner} From the target pixel array initially
+        passed in via the ARM processor, read in the target pixel designated at
+        the specified target pixel array DDR memory pointer (which is index 0
+        of the array pointer on the first iteration) and write that to the
+        \textit{pl\_stream\_out} AXI4-Stream. NOTE: 128 bits are read since DDR
+        operates on 64 bit boundaries. This means that the first 64 bits
+        contain the X and Y component of the target pixel, and the second 64
+        bits contains the Z and a zero pad value.
+    \item Repeat step \ref{itm:pl_stride_inner} a total of 16 times to send 16
+        target pixels through \textit{pl\_stream\_out} AXI4-Stream.
+    \item \label{itm:pl_stride_middle} Shift the target pixel array DDR memory
+        pointer by the number of target pixels destined for each AIE kernel per
+        pulse. This equates to shifting the target pixel pointer by
+        \(\frac{\textit{TOTAL\_TARGET\_PIXELS}}{\textit{IMG\_SOLVERS}}\)
+        where: \textit{TOTAL\_TARGET\_PIXELS} = \(\textit{AZ\_SAMPLES} \times
+        \textit{RC\_SAMPLES}\).
+    \item Repeat steps \ref{itm:pl_stride_inner} through
+        \ref{itm:pl_stride_middle} for total of
+        \textit{IMG\_SOLVERS\_PER\_SWITCH} times, which is the number of Image
+        Reconstruction kernels that are connected to the AXI4-Stream packet
+        splitter switch. This is also the number of Image Reconstruction
+        kernels per BP Cluster.
+    \item \label{itm:pl_stride_outer} At this step, the target pixel array DDR
+        memory pointer is at the end of the target pixel array for a single BP
+        Cluster, so the pointer rolls back back to the beginning of the list,
+        but offset by 16 pixels. For example, on the first iteration the base
+        index pointer was 0, on the second iteration it would be 16, on the
+        third it would be 32, on the fourth it would be 48, and so on.
+    \item Repeat steps \ref{itm:pl_stride_inner} through
+        \ref{itm:pl_stride_outer} for a total of how many multiples of 16
+        pixels it takes to get through all the target pixels destined for a
+        single Image Reconstruction kernel. This equates to shifting the target
+        pixel pointer by
+        \(\frac{\textit{TOTAL\_TARGET\_PIXELS}}{\textit{IMG\_SOLVERS} \times
+        16}\).
+    \item \label{itm:pl_stride_sw_loop} Shift the target pixel array DDR memory
+        pointer by one whole BP Cluster's worth of target pixels. This would
+        equate to shifting the target pixel pointer by
+        \(\frac{\textit{TOTAL\_TARGET\_PIXELS}}{\textit{AIE\_SWITCHES}}\).
+    \item Repeat steps \ref{itm:pl_stride_inner} through
+        \ref{itm:pl_stride_sw_loop} for a total of \textit{AIE\_SWITCHES} (i.e.
+        BP Clusters).
+    \item \label{itm:pl_stride_pulse_loop} Shift the target pixel array DDR
+        memory pointer by one whole pulse worth of target pixels.
+    \item Repeat steps \ref{itm:pl_stride_inner} through
+        \ref{itm:pl_stride_pulse_loop} for the total number of pulses
+\end{enumerate}
+
+It is worth noting that the current design is limited to a
+\textit{AIE\_SWITCHES} value of 1. Future work aims to increase this number
+(see Section~\ref{sec:future_work} for more information). In order for this PL
+kernel to be integrated into the Vivado design and a complete XSA file be
+generated, the Vitis toolchain requires a system.cfg file that specifies how
+the PL kernel is connected to the rest of the system. Prior to the PL kernel
+being built, the Makefile will automatically update this
 \textit{design/system\_cfg/system.cfg} file based on how the design is
 configured within the \textit{design/common.h}.
 
