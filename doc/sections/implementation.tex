@@ -44,7 +44,7 @@ SIMD intrinsics, multi-core instantiation, and instruction-level parallelism
 (ILP). The current implementation heavily emphasizes SIMD and multi-core
 parallelism. While some ILP optimizations were implemented, further ILP
 modifications could potentially be made and are reserved for future work (see
-Section~\ref{sec:future_work}). Accuracy is validated by comparing focused
+Section~\ref{sec:ilp_optimizations}). Accuracy is validated by comparing focused
 images from the Versal hardware and AI Engine simulations against MATLAB
 reference outputs.
 
@@ -215,10 +215,7 @@ paths), and packet mergers (combining multiple streams into one). These
 abstractions allow the toolchain to map kernel interconnects onto the
 underlying AXI4-Stream fabric without requiring manual stream management
 software. The specific kernel implementations and the overall graph topology
-are described in more detail in Sections~\ref{subsec:data_broadcasting_kern},
-\ref{subsec:pixel_demux_kern}, \ref{subsec:img_recon_kern},
-\ref{subsec:pl_pkt_router_kern}, \ref{subsec:pl_stride_kern}, and
-\ref{subsec:graph_impl}.
+are described in more detail in the following sections.
 
 \FloatBarrier
 
@@ -251,14 +248,14 @@ between the AI Engine and the PL kernels. This design comes from the \textit{mai
 \textit{design/common.h} were set:
 
 \begin{itemize}
-    \item {\boldmath $PULSES = 1$}: Number of pulses to process per iteration.
-    \item {\boldmath $RC\_SAMPLES = 64$}: Number of range compression samples to process
-        per iteration.
-    \item {\boldmath $AIE\_SWITCHES = 2$}: The number of AXI4-Stream switch
+    \item $\mathtt{PULSES} = 1$: Number of pulses to process per iteration.
+    \item $\mathtt{RC\_SAMPLES} = 64$: Number of range compression samples to
+        process per iteration.
+    \item $\mathtt{AIE\_SWITCHES} = 2$: The number of AXI4-Stream switch
         splitter/merger pairs. Also known as the number of backprojection
         clusters (BP Clusters).
-    \item {\boldmath $IMG\_SOLVERS\_PER\_SWITCH = 2$}: The number of Image Reconstruction
-        kernels per BP cluster.
+    \item $\mathtt{IMG\_SOLVERS\_PER\_SWITCH} = 2$: The number of Image
+        Reconstruction kernels per BP cluster.
 \end{itemize}
 
 The maximum number of AXI4-Stream channels per packet spliter or merger is 32.
@@ -288,12 +285,12 @@ The inputs and outputs for the Data Broadcast kernel are listed below:
     \item \textbf{slowtime\_in (float):} AXI4-Stream from the DDR
         originating from the ARM processor that contains antenna X, Y, Z and
         range to scene center.
-    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Buffered range
+    \item \textbf{rc\_in (\texttt{RC\_SAMPLES} cfloats):} Buffered range
         compressed phase data from the DDR originating from the ARM processor.
     \item \textbf{slowtime\_out (float):} AXI4-Stream that contains antenna
         X, Y, Z and range to scene center. This stream is broadcasted to every
         instantiated Image Reconstruction kernel.
-    \item \textbf{rc\_out (\textit{RC\_SAMPLES} cfloats):} Buffered range
+    \item \textbf{rc\_out (\texttt{RC\_SAMPLES} cfloats):} Buffered range
         compressed phase data that is broadcasted to every instantiated Image
         Reconstruction kernel.
 \end{itemize}
@@ -301,30 +298,30 @@ The inputs and outputs for the Data Broadcast kernel are listed below:
 As mentioned in Section \ref{subsec:aie_graphs}, execution of kernels begin
 when they receive their specified number of data samples matching their
 allocated buffer size (assuming the kernel uses any buffer types as input). The
-Broadcast kernel only has one buffer input, which is \textit{rc\_in} (shown in
-Figure~\ref{fig:aie_graph}). The \textit{rc\_in} buffer holds up to
-\textit{RC\_SAMPLES} cfloats, where each cfloat is 8 bytes in total (2 floats
-for the real and imaginary numbers). Once \textit{rc\_in} buffer is completely
-filled, the kernel will execute. Currently, \textit{RC\_SAMPLES} can only be
+Broadcast kernel only has one buffer input, which is \texttt{rc\_in} (shown in
+Figure~\ref{fig:aie_graph}). The \texttt{rc\_in} buffer holds up to
+\texttt{RC\_SAMPLES} cfloats, where each cfloat is 8 bytes in total (2 floats
+for the real and imaginary numbers). Once \texttt{rc\_in} buffer is completely
+filled, the kernel will execute. Currently, \texttt{RC\_SAMPLES} can only be
 64, 128, 256, or 512 cfloats. 512 cfloats is the maximum size due to buffer
 size limitations within the AI Engine. Once the Data Broadcast kernel executes,
 it performs the following steps:
 
 \begin{enumerate}
     \item Perform a SIMD vector operation that pops 4 floats from the
-        \textit{slowtime\_in} AXI4-Stream port and pushes it onto the
-        \textit{slowtime\_out} AXI4-Stream port. This may seem redundant, but
+        \texttt{slowtime\_in} AXI4-Stream port and pushes it onto the
+        \texttt{slowtime\_out} AXI4-Stream port. This may seem redundant, but
         it is needed to exploit the broadcasting mechanisms within the AI
-        Engine to broadcast the \textit{slowtime\_out} AXI4-Stream data to all
+        Engine to broadcast the \texttt{slowtime\_out} AXI4-Stream data to all
         of the Image Reconstruction kernels.
-    \item For a total of \textit{RC\_SAMPLES}/16, perform a SIMD vector
-        operation that pops 16 cfloats at a time from the \textit{rc\_in}
-        ping-pong buffer port and push them onto the \textit{rc\_out} ping-pong
+    \item For a total of \texttt{RC\_SAMPLES}/16, perform a SIMD vector
+        operation that pops 16 cfloats at a time from the \texttt{rc\_in}
+        ping-pong buffer port and push them onto the \texttt{rc\_out} ping-pong
         buffer port.
-    \item Once the \textit{rc\_out} ping-pong buffer has a total of
-        \textit{RC\_SAMPLES} cfloats, the Broadcast kernel now has a full
-        \textit{rc\_out} buffer so it will automatically release lock on the
-        \textit{rc\_out} buffer port and forward that data out from the
+    \item Once the \texttt{rc\_out} ping-pong buffer has a total of
+        \texttt{RC\_SAMPLES} cfloats, the Broadcast kernel now has a full
+        \texttt{rc\_out} buffer so it will automatically release lock on the
+        \texttt{rc\_out} buffer port and forward that data out from the
         Broadcast kernel's local memory to all Image Reconstruction kernel
         memories via an AXI4-Stream burst.
 \end{enumerate}
@@ -340,10 +337,10 @@ it performs the following steps:
 
 Only one Pixel Demux kernel is instantiated per BP Cluster, as shown in
 Figure~\ref{fig:aie_graph}. The Pixel Demux kernel receives its data from the
-ARM processor via DDR through one GMIO port (\textit{px\_xyz\_in}). It pushes
-its data out via one output port (\textit{px\_xyz\_out}) that feeds into an
-AXI4-Stream splitter switch. The port types for \textit{px\_xyz\_in} and
-\textit{px\_xyz\_out} are both AXI4-Stream data ports. The input and output
+ARM processor via DDR through one GMIO port (\texttt{px\_xyz\_in}). It pushes
+its data out via one output port (\texttt{px\_xyz\_out}) that feeds into an
+AXI4-Stream splitter switch. The port types for \texttt{px\_xyz\_in} and
+\texttt{px\_xyz\_out} are both AXI4-Stream data ports. The input and output
 port descriptions for the Pixel Demuxer kernel are listed below:
 
 \begin{itemize}
@@ -362,13 +359,13 @@ port descriptions for the Pixel Demuxer kernel are listed below:
 
 \begin{enumerate}
     \item \label{itm:create_header_1} Construct an AXI4-Stream packet header and
-        send it out the \textit{px\_xyz\_out} AXI4-Stream port.
-    \item \label{itm:px_in_px_out_1} Read a float from \textit{px\_xyz\_in}
-        AXI4-Stream and send it out through \textit{px\_xyz\_out} AXI4-Stream.
+        send it out the \texttt{px\_xyz\_out} AXI4-Stream port.
+    \item \label{itm:px_in_px_out_1} Read a float from \texttt{px\_xyz\_in}
+        AXI4-Stream and send it out through \texttt{px\_xyz\_out} AXI4-Stream.
     \item \label{itm:demux_repeat_1} Repeat step \ref{itm:px_in_px_out_1} for
         $(3*PULSES*RC\_SAMPLES)/IMG\_SOLVERS$ times.
     \item Repeat steps \ref{itm:create_header_1} through
-        \ref{itm:demux_repeat_1} for \textit{IMG\_SOLVERS\_PER\_SWITCH} times.
+        \ref{itm:demux_repeat_1} for \texttt{IMG\_SOLVERS\_PER\_SWITCH} times.
 \end{enumerate}
 
 \noindent The following outlines the Pixel Demux operations based on the
@@ -376,17 +373,17 @@ port descriptions for the Pixel Demuxer kernel are listed below:
 
 \begin{enumerate}
     \item \label{itm:create_header_2} Construct an AXI4-Stream packet header
-        and send it out the \textit{px\_xyz\_out} AXI4-Stream port.
-    \item \label{itm:px_in_px_out_2} Read a float from \textit{px\_xyz\_in}
-        AXI4-Stream and send it out through \textit{px\_xyz\_out} AXI4-Stream.
+        and send it out the \texttt{px\_xyz\_out} AXI4-Stream port.
+    \item \label{itm:px_in_px_out_2} Read a float from \texttt{px\_xyz\_in}
+        AXI4-Stream and send it out through \texttt{px\_xyz\_out} AXI4-Stream.
     \item \label{itm:demux_inner_repeat_2} Repeat step \ref{itm:px_in_px_out_2}
         for $48$ times since the Image Reconstruction kernel expects to receive
         16 floats of X, Y and Z at a time ($16*3=48$).
     \item \label{itm:demux_middle_repeat_2} Repeat steps
         \ref{itm:create_header_2} through \ref{itm:demux_inner_repeat_2} for
-        \textit{IMG\_SOLVERS\_PER\_SWITCH} times.
+        \texttt{IMG\_SOLVERS\_PER\_SWITCH} times.
     \item Repeat steps \ref{itm:create_header_2} through
-        \ref{itm:demux_middle_repeat_2} for \textit{PULSES} times.
+        \ref{itm:demux_middle_repeat_2} for \texttt{PULSES} times.
 \end{enumerate}
 
 
@@ -420,11 +417,11 @@ execution:
 
 \begin{enumerate}
     \item \label{itm:create_header_3} Construct an AXI4-Stream packet header and
-        send it out the \textit{px\_xyz\_out} AXI4-Stream port
+        send it out the \texttt{px\_xyz\_out} AXI4-Stream port
     \item \label{itm:px_in_px_out_3} Perform a SIMD vector operation that pops
         4 floats (X, Y, Z, and a zero padded number) from the
-        \textit{px\_xyz\_in} AXI4-Stream port and send them out through the
-        \textit{px\_xyz\_out} AXI4-Stream port. The reason a zero pad is used
+        \texttt{px\_xyz\_in} AXI4-Stream port and send them out through the
+        \texttt{px\_xyz\_out} AXI4-Stream port. The reason a zero pad is used
         for the 4th float is because the PL optimizes its transfers by sending
         128bit bursts at a time. The first 96 bits (12 bytes) are the X, Y, and
         Z target pixels. To keep the data transactions aligned with how the PL
@@ -435,25 +432,25 @@ execution:
         X, Y and Z components at a time.
     \item \label{itm:demux_middle_repeat_3} Repeat steps
         \ref{itm:create_header_3} through \ref{itm:demux_repeat_3} for
-        \textit{IMG\_SOLVERS\_PER\_SWITCH} times
+        \texttt{IMG\_SOLVERS\_PER\_SWITCH} times
     \item Repeat steps \ref{itm:create_header_3} through
-        \ref{itm:demux_middle_repeat_3} for \textit{PULSES} times.
+        \ref{itm:demux_middle_repeat_3} for \texttt{PULSES} times.
 \end{enumerate}
 
 The following configurations within \textit{design/common.h} were set for the
 \textit{pl\_stride} branch:
 
 \begin{itemize}
-    \item {\boldmath $PULSES = 1$}: Number of pulses to process per iteration
-    \item {\boldmath $RC\_SAMPLES = 64$}: Number of range compression samples to process
-        per iteration
-    \item {\boldmath $AIE\_SWITCHES = 1$}: The number of AXI4-Stream switch
+    \item $\mathtt{PULSES} = 1$: Number of pulses to process per iteration.
+    \item $\mathtt{RC\_SAMPLES} = 64$: Number of range compression samples to
+        process per iteration.
+    \item $\mathtt{AIE\_SWITCHES} = 1$: The number of AXI4-Stream switch
         splitter/merger pairs. Also known as the number of backprojection
-        clusters (BP Clusters). NOTE: The design is currently only limited to a
-        \textit{AIE\_SWITCHES} value of 1. Future work aims to increase this
-        number (see Section~\ref{sec:future_work} for more information).
-    \item {\boldmath $IMG\_SOLVERS\_PER\_SWITCH = 4$}: The number of Image Reconstruction
-        kernels per BP cluster.
+        clusters (BP Clusters). NOTE: The design is currently only limited to
+        an \texttt{AIE\_SWITCHES} value of 1. Future work aims to increase this
+        number. See Section~\ref{subsec:pl_stride_kern} for more information.
+    \item $\mathtt{IMG\_SOLVERS\_PER\_SWITCH} = 4$: The number of Image
+        Reconstruction kernels per BP cluster.
 \end{itemize}
 
 \FloatBarrier
@@ -477,7 +474,7 @@ are listed below:
 \begin{itemize}
     \item \textbf{slowtime\_in (4 floats):} Buffered slowtime data containing
         the antenna X, Y, Z and range to target scene center.
-    \item \textbf{rc\_in (\textit{RC\_SAMPLES} cfloats):} Buffered range
+    \item \textbf{rc\_in (\texttt{RC\_SAMPLES} cfloats):} Buffered range
         compressed phase data.
     \item \textbf{px\_xyz\_in (float):} AXI4-Stream packets of X, Y, and Z
         pixels of interest for the target scene. 
@@ -499,11 +496,11 @@ conditions for executing the kernel. For the Image Reconstruction kernel, this
 means the following condition must be met for it to execute once:
 
 \begin{itemize}
-    \item \textit{slowtime\_in} buffer contains 4 floats from the Data
+    \item \texttt{slowtime\_in} buffer contains 4 floats from the Data
         Broadcast kernel
-    \item \textit{rc\_in} buffer contains \textit{RC\_SAMPLES} cfloats from the
+    \item \texttt{rc\_in} buffer contains \texttt{RC\_SAMPLES} cfloats from the
         Data Broadcast kernel
-    \item \textit{rtp\_dump\_img\_in} RTP is passed in from the ARM processor
+    \item \texttt{rtp\_dump\_img\_in} RTP is passed in from the ARM processor
 \end{itemize}
 
 \noindent Once the Image Reconstruction kernel executes, it performs the
@@ -512,15 +509,15 @@ following steps within the \textit{main} branch:
 \begin{enumerate}
     \item \label{itm:stream_read} Remove the AXI4-Stream header and fetch all
         target pixels destined for the specific Image Reconstruction kernel
-        through the \textit{px\_xyz\_in} AXI4-Stream packet port. The number of
-        target pixels is based on the equation \( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\). Each element from the
-        AXI4-Stream port is of type \textit{int} and contains the X, Y, and Z
-        target pixel. A \textit{reinterpret\_cast} is performed on the X, Y,
+        through the \texttt{px\_xyz\_in} AXI4-Stream packet port. The number of
+        target pixels is based on the equation \( \frac{\texttt{PULSES} \times
+        \texttt{RC\_SAMPLES}}{\texttt{IMG\_SOLVERS}}\). Each element from the
+        AXI4-Stream port is of type \texttt{int} and contains the X, Y, and Z
+        target pixel. A \texttt{reinterpret\_cast} is performed on the X, Y,
         and Z data to cast them into floats (since all AXI4-Stream packet data
         are int types by default) and place the X, Y, and Z floats into their
         own buffers on the heap of the running AI tile. It is important to read
-        the \textit{px\_xyz\_in} AXI4-Stream packet port as quickly as possible
+        the \texttt{px\_xyz\_in} AXI4-Stream packet port as quickly as possible
         since the Pixel Demux kernel wont continue distributing target
         pixels to the other Image Reconstruction kernels in the BP cluster
         until it has fed all the target pixels into the Image Reconstruction
@@ -534,33 +531,33 @@ following steps within the \textit{main} branch:
         cycle.
     \item \label{itm:diff_range_idx} Divide the differential range vector from
         step \ref{itm:diff_range} by the range resolution to get an index
-        vector that can later be used for fetching values from \textit{rc\_in}
+        vector that can later be used for fetching values from \texttt{rc\_in}
         (used in step \ref{itm:interp}). This index vector is shifted by adding
-        half of \textit{RC\_SAMPLES}; this is done to properly align with the
-        values within the \textit{rc\_in} buffer.
+        half of \texttt{RC\_SAMPLES}; this is done to properly align with the
+        values within the \texttt{rc\_in} buffer.
     \item \label{itm:ph_corr} Calculate the phase correction vector for the
         image by multiplying the differential range vector from step
         \ref{itm:diff_range} by the phase correction coefficient. NOTE: Because
-        the AI Engine API \textit{sincos\_complex} function only works if the
+        the AI Engine API \texttt{sincos\_complex} function only works if the
         domain is between $-\pi$ and $\pi$, the phase correction vector from
         step \ref{itm:ph_corr} must be scaled up/down by $2\pi$ accordingly to
-        fall within $-\pi$ and $\pi$. If the domain of \textit{sincos\_complex}
+        fall within $-\pi$ and $\pi$. If the domain of \texttt{sincos\_complex}
         is not between $-\pi$ and $\pi$, the output of the function will be
         saturated to -1 or 1 depending on if the input value is below $-\pi$ or
         above $\pi$ respectively.
     \item \label{itm:interp} Because step \ref{itm:diff_range_idx} results in
         an index vector with fractional numbers, both the closest lower and
         upper whole number indices are derived. These integer indices are used
-        to fetch two values from the range compressed buffer (\textit{rc\_in})
+        to fetch two values from the range compressed buffer (\texttt{rc\_in})
         in order to perform linear interpolation in order to provide a more
         accurate representation of the signal at the desired fractional index.
-        NOTE: Indexing into the \textit{rc\_in} buffer is done \textbf{one at a
+        NOTE: Indexing into the \texttt{rc\_in} buffer is done \textbf{one at a
         time} instead of using SIMD vector operations. The algorithm breaks
         convention of using SIMD vector operations since the AI Engine API only
         support single value indexing into buffers at the time of writing; this
         results in a large performance hit to the algorithm. Performance
         improvements like this are reserved for future work. See
-        Section~\ref{sec:future_work} for more details.
+        Section~\ref{sec:aie_algo_optimization} for more details.
     \item \label{itm:px} Take the single interpolated range compressed value
         from step \ref{itm:interp} and multiply it by the phase corrected value
         from step \ref{itm:ph_corr} to get the phase corrected pixel in the
@@ -573,28 +570,28 @@ following steps within the \textit{main} branch:
         indices within the index vector from step \ref{itm:diff_range_idx}.
         NOTE: See note in step \ref{itm:interp} for why this loop is needed.
     \item \label{itm:main_loop} Repeat steps \ref{itm:buffer_load} through \ref{itm:inner_loop} for a
-        total of \( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\) times for all of the X,
-        Y, and Z pixels of interest within the \textit{px\_xy\_in} buffer.
+        total of \( \frac{\texttt{PULSES} \times
+        \texttt{RC\_SAMPLES}}{\texttt{IMG\_SOLVERS}}\) times for all of the X,
+        Y, and Z pixels of interest within the \texttt{px\_xy\_in} buffer.
     \item A single invocation of the Image Reconstruction kernel is completed.
-        However, the \textit{img\_out} buffer (intended for transferring the
+        However, the \texttt{img\_out} buffer (intended for transferring the
         final focused image to the ARM processor) remains unwritten at this
-        point. This is because the kernel must be invoked \textit{PULSES} times
+        point. This is because the kernel must be invoked \texttt{PULSES} times
         to fully focus the image across all pulses. In each invocation, the
         Data Broadcast kernel provides updated slowtime data and range
         compressed samples. See \ref{subsec:data_broadcasting_kern} for more
         information on the Data Broadcast kernel. During the final pulse, the
         ARM processor signals the Image Reconstruction kernel to write the
-        accumulated focused image to the \textit{img\_out} buffer for the last
-        invocation by setting the \textit{rtp\_dump\_img\_in} RTP value to 1.
+        accumulated focused image to the \texttt{img\_out} buffer for the last
+        invocation by setting the \texttt{rtp\_dump\_img\_in} RTP value to 1.
 \end{enumerate}
 
 The \textit{host\_stride} and \textit{pl\_stride} branches have similar steps
 as above. The only difference is step \ref{itm:stream_read} is no longer
 performed and step \ref{itm:buffer_load} reads the target pixels directly from
-the AXI4-Stream \textit{px\_xyz\_in} port in 16 pixel increments. The loop in
+the AXI4-Stream \texttt{px\_xyz\_in} port in 16 pixel increments. The loop in
 step \ref{itm:main_loop} encompasses the above step so that 16 pixels will be
-fetched from the \textit{px\_xyz\_in} stream every iteration. This allows the
+fetched from the \texttt{px\_xyz\_in} stream every iteration. This allows the
 Pixel Demuxer kernel to Round-Robin 16 pixels at a time to each Image
 Reconstruction kernel, then loop back to the first Image Reconstruction kernel
 to repeat the round-robin until all pixels that are fed into the Pixel Demuxer
@@ -608,8 +605,8 @@ kernel are dispersed.
 The DMA Packet Router PL kernel is written in High-Level Synthesis (HLS), which
 allows the developer to write C/C++ and compile the code into synthesizable
 code for the FPGA. After the Image Reconstruction kernels have been executed
-\textit{PULSES} times and they send out their focused segments of the image
-through \textit{img\_out} AXI4-Stream packets, a PL DMA Packet Router kernel
+\texttt{PULSES} times and they send out their focused segments of the image
+through \texttt{img\_out} AXI4-Stream packets, a PL DMA Packet Router kernel
 will receive the stream from each Image Reconstruction kernel within a BP
 cluster and stitch them together in an ordered way before placing them in DDR.
 This will allow the ARM processor to read from DDR contiguously to see the
@@ -642,17 +639,17 @@ below:
     \item \label{itm:pl_rtr_ddr_offset} Calculate the DDR offset location for
         placing the AXI4-Stream packet by taking the instance ID from the
         header, and multiplying it by the number of samples (\(
-        \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\)) given to each Image
+        \frac{\texttt{PULSES} \times
+        \texttt{RC\_SAMPLES}}{\texttt{IMG\_SOLVERS}}\)) given to each Image
         Reconstruction kernel.
     \item \label{itm:pl_rtr_inner_loop} Read another 128 bits of the
         AXI4-Stream packet and place that image data at the specified offset
         derived in step \ref{itm:pl_rtr_ddr_offset}.
     \item \label{itm:pl_rtr_repeat} Repeat step \ref{itm:pl_rtr_inner_loop} for
-        \( \frac{\textit{PULSES} \times
-        \textit{RC\_SAMPLES}}{\textit{IMG\_SOLVERS}}\) times
+        \( \frac{\texttt{PULSES} \times
+        \texttt{RC\_SAMPLES}}{\texttt{IMG\_SOLVERS}}\) times
     \item Repeat steps \ref{itm:pl_rtr_outer_loop} through
-        \ref{itm:pl_rtr_repeat} for \textit{IMG\_SOLVERS\_PER\_SWITCH} times
+        \ref{itm:pl_rtr_repeat} for \texttt{IMG\_SOLVERS\_PER\_SWITCH} times
 \end{enumerate}
 
 In order for this PL kernel to be integrated into the Vivado design and a
@@ -703,21 +700,21 @@ listed below:
         passed in via the ARM processor, read in the target pixel designated at
         the specified target pixel array DDR memory pointer (which is index 0
         of the array pointer on the first iteration) and write that to the
-        \textit{pl\_stream\_out} AXI4-Stream. NOTE: 128 bits are read since DDR
+        \texttt{pl\_stream\_out} AXI4-Stream. NOTE: 128 bits are read since DDR
         operates on 64 bit boundaries. This means that the first 64 bits
         contain the X and Y component of the target pixel, and the second 64
         bits contains the Z and a zero pad value.
     \item Repeat step \ref{itm:pl_stride_inner} a total of 16 times to send 16
-        target pixels through \textit{pl\_stream\_out} AXI4-Stream.
+        target pixels through \texttt{pl\_stream\_out} AXI4-Stream.
     \item \label{itm:pl_stride_middle} Shift the target pixel array DDR memory
         pointer by the number of target pixels destined for each AIE kernel per
         pulse. This equates to shifting the target pixel pointer by
-        \(\frac{\textit{TOTAL\_TARGET\_PIXELS}}{\textit{IMG\_SOLVERS}}\)
-        where: \textit{TOTAL\_TARGET\_PIXELS} = \(\textit{AZ\_SAMPLES} \times
-        \textit{RC\_SAMPLES}\).
+        \(\frac{\texttt{TOTAL\_TARGET\_PIXELS}}{\texttt{IMG\_SOLVERS}}\)
+        where: \texttt{TOTAL\_TARGET\_PIXELS} = \(\texttt{AZ\_SAMPLES} \times
+        \texttt{RC\_SAMPLES}\).
     \item Repeat steps \ref{itm:pl_stride_inner} through
         \ref{itm:pl_stride_middle} for total of
-        \textit{IMG\_SOLVERS\_PER\_SWITCH} times, which is the number of Image
+        \texttt{IMG\_SOLVERS\_PER\_SWITCH} times, which is the number of Image
         Reconstruction kernels that are connected to the AXI4-Stream packet
         splitter switch. This is also the number of Image Reconstruction
         kernels per BP Cluster.
@@ -732,14 +729,14 @@ listed below:
         pixels it takes to get through all the target pixels destined for a
         single Image Reconstruction kernel. This equates to shifting the target
         pixel pointer by
-        \(\frac{\textit{TOTAL\_TARGET\_PIXELS}}{\textit{IMG\_SOLVERS} \times
+        \(\frac{\texttt{TOTAL\_TARGET\_PIXELS}}{\texttt{IMG\_SOLVERS} \times
         16}\).
     \item \label{itm:pl_stride_sw_loop} Shift the target pixel array DDR memory
         pointer by one whole BP Cluster's worth of target pixels. This would
         equate to shifting the target pixel pointer by
-        \(\frac{\textit{TOTAL\_TARGET\_PIXELS}}{\textit{AIE\_SWITCHES}}\).
+        \(\frac{\texttt{TOTAL\_TARGET\_PIXELS}}{\texttt{AIE\_SWITCHES}}\).
     \item Repeat steps \ref{itm:pl_stride_inner} through
-        \ref{itm:pl_stride_sw_loop} for a total of \textit{AIE\_SWITCHES} (i.e.
+        \ref{itm:pl_stride_sw_loop} for a total of \texttt{AIE\_SWITCHES} (i.e.
         BP Clusters).
     \item \label{itm:pl_stride_pulse_loop} Shift the target pixel array DDR
         memory pointer by one whole pulse worth of target pixels.
@@ -748,12 +745,12 @@ listed below:
 \end{enumerate}
 
 It is worth noting that the current design is limited to a
-\textit{AIE\_SWITCHES} value of 1. Future work aims to increase this number
-(see Section~\ref{sec:future_work} for more information). In order for this PL
-kernel to be integrated into the Vivado design and a complete XSA file be
-generated, the Vitis toolchain requires a system.cfg file that specifies how
-the PL kernel is connected to the rest of the system. Prior to the PL kernel
-being built, the Makefile will automatically update this
+\texttt{AIE\_SWITCHES} value of 1. Future work aims to increase this number
+(see Section~\ref{sec:dma_strd_ctlr_pl_kern_improve} for more information). In
+order for this PL kernel to be integrated into the Vivado design and a complete
+XSA file be generated, the Vitis toolchain requires a system.cfg file that
+specifies how the PL kernel is connected to the rest of the system. Prior to
+the PL kernel being built, the Makefile will automatically update this
 \textit{design/system\_cfg/system.cfg} file based on how the design is
 configured within the \textit{design/common.h}.
 
@@ -774,7 +771,7 @@ the antenna. In order to reduce the number of GMIO inputs being used (max of
 32), all slow time data is sent through the same GMIO input port. The graph is
 configured to forward this data to the Data Broadcast kernel and that graph
 code is written to broadcast the Data Broadcast kernel output to all Image
-Reconstruction kernels. The Vitis Analyzer tool was used to generate a block
+Reconstruction kernels. \textit{Vitis Analyzer} was used to generate a block
 diagram of the designed AI Engine graph, which can be seen in
 Figure~\ref{fig:aie_graph} and \ref{fig:aie_graph_w_stride_ctl}.
 

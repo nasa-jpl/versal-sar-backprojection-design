@@ -41,21 +41,22 @@ shadow.
 
 The work throughout this paper focuses on spotlight-mode backprojection, an
 image reconstruction technique that operates on the raw complex radar
-measurements known as phase-history data. For each image pixel, backprojection
-uses the recorded platform trajectory to compute the two-way travel time to
-that pixel for every pulse. Each recorded echo is aligned to that pixel by
-applying the computed delay. This can be done by shifting the waveform in time
-or by applying the corresponding phase shift across the signal’s bandwidth.
-After alignment, the echoes are summed. When the delays match the true geometry
-and timing, the aligned echoes add in phase at that pixel and tend to cancel
-elsewhere, producing a focused image. Because backprojection coherently
-combines many pulses for every pixel, the echoes from the true location align
-in phase and reinforce, increasing the pixel’s intensity even when the platform
-does not fly a perfectly straight path or the viewing geometry is not ideal,
-provided the trajectory and timing are modeled with sufficient accuracy. These
-strengths come with significant computational cost. Consequently, many
-operational systems transmit phase-history data to the ground and form images
-there rather than on board.
+measurements known as phase-history data. Stripmap-mode backprojection is left
+for future work (see Section~\ref{sec:stripmap_mode} for more details). For
+each image pixel, backprojection uses the recorded platform trajectory to
+compute the two-way travel time to that pixel for every pulse. Each recorded
+echo is aligned to that pixel by applying the computed delay. This can be done
+by shifting the waveform in time or by applying the corresponding phase shift
+across the signal’s bandwidth. After alignment, the echoes are summed. When the
+delays match the true geometry and timing, the aligned echoes add in phase at
+that pixel and tend to cancel elsewhere, producing a focused image. Because
+backprojection coherently combines many pulses for every pixel, the echoes from
+the true location align in phase and reinforce, increasing the pixel’s
+intensity even when the platform does not fly a perfectly straight path or the
+viewing geometry is not ideal, provided the trajectory and timing are modeled
+with sufficient accuracy. These strengths come with significant computational
+cost. Consequently, many operational systems transmit phase-history data to the
+ground and form images there rather than on board.
 
 % -----------------------------------------------------------------------------
 % Versal Architecture

@@ -1,4 +1,136 @@
 % =============================================================================
+\section{MATLAB Code}
+% =============================================================================
+\label{sec:matlab_appendix}
+
+The MATLAB implementation is used primarily to generate and manipulate the
+phase history data serving as input to the Versal platform. Using Gorham’s SAR
+dataset and mathematical formulation~\cite{Gorham}, the MATLAB code produces
+post-processed iFFT'd time-domain data after zero-padding in the frequency
+domain to achieve the desired range resolution. This preprocessing ensures that
+the data provided to the Versal hardware accurately represents the desired
+input conditions while bypassing the need for on-chip FFT and iFFT operations.
+The MATLAB outputs are also used as a reference for verifying the accuracy of
+the AI Engine backprojection results (shown in Figure~\ref{fig:matlab_img}).
+The MATLAB code is shown below in listing~\ref{lst:matlab_code}.
+
+% -----------------------------------------------------------------------------
+% Generate MATLAB image from GOTACH dataset (60 degrees)
+% -----------------------------------------------------------------------------
+\begin{figure}[!hbtp]
+  \begin{center}
+    \includegraphics[width=\textwidth]{figures/MATLAB_GOTCHA_60Deg.jpg}
+  \end{center}
+  \caption{Generated MATLAB image from above code (60 degrees).}
+  \label{fig:matlab_img}
+\end{figure}
+% -----------------------------------------------------------------------------
+
+\begin{lstlisting}[
+  style=Matlab-editor,
+  caption={MATLAB script for preprocessing input data and generating reference
+  output imagery for Versal comparison. The function definition of
+  \texttt{bpBasic(...)} is provided from the MATLAB code within "SAR Image
+  Formation Toolbox for MATLAB" paper by Gorham et al. The
+  \texttt{dlmwrite(...)} functions provide the preprocessed CSV input for
+  Versal. \cite{Gorham}},
+  label={lst:matlab_code},
+  basicstyle=\ttfamily\footnotesize,
+  captionpos=b
+]
+% Author: Austin Owens
+% Email: austin.t.owens@jpl.nasa.gov
+%
+% data.Nfft: Size of the FFT to form the range profile
+% data.deltaF: Step size of frequency data (Hz)
+% data.minF: Vector containing the start frequency of each pulse (Hz)
+% data.x_mat: The x-position of each pixel (m)
+% data.y_mat: The y-position of each pixel (m)
+% data.z_mat: The z-position of each pixel (m)
+% data.AntX: The x-position of the sensor at each pulse (m)
+% data.AntY: The y-position of the sensor at each pulse (m)
+% data.AntZ: The z-position of the sensor at each pulse (m)
+% data.R0: The range to scene center (m)
+% data.phdata: Phase history data (frequency domain)
+%              Fast time in rows, slow time in columns
+%
+% data definitions:
+% i.) data.fp: Phase history data (complex)
+% ii.) data.freq: Column vector containing frequencies (Hz)
+% iii.) data.x: Row vector containing the x-coordinate of the antenna location
+% iv.) data.y: Row vector containing the y-coordinate of the antenna location
+% v.) data.z: Row vector containing the z-coordinate of the antenna location
+% vi.) data.r0: Row vector containing range to scene center from the antenna location
+% vii.) data.th: Row vector containing azimuth angle. 0 degrees is the pos x-axis
+% viii.) data.phi: Row vector containing elevation angle. 0 degrees is the xy-plane
+% ix.) data.af: Structure containing autofocus information (only for HH and VV data). 
+%      It contains 2 row vectors:
+% x.) data.af.r_correct: Row vector containing the correction for r0
+% xi.) data.af.ph_correct: Row vector containing the phase correction
+
+clc;clear;
+
+data.AntX = [];
+data.AntY = [];
+data.AntZ = [];
+data.R0 = [];
+data.phdata = [];
+avg_delta_freq = 0;
+min_freq = 0;
+polarization = "HH";
+
+% Number of files to process. Each file represents 1 degree (360 deg total)
+FileNum = 60;
+
+for n = 1:FileNum   
+    str = sprintf('/mnt/disk/austin/SAR_DATA/GOTCHA-CP_Disc1/DATA/pass1/%s/data_3dsar_pass1_az%03d_%s.mat', polarization, n, polarization);
+    az = load(str);
+    data.AntX = [data.AntX, az.data.x];
+    data.AntY = [data.AntY, az.data.y];
+    data.AntZ = [data.AntZ, az.data.z];
+    data.R0 = [data.R0, az.data.r0];
+    data.phdata = [data.phdata, az.data.fp];
+    avg_delta_freq = avg_delta_freq + mean(diff(az.data.freq));
+    min_freq = az.data.freq(1);
+end
+data.deltaF = avg_delta_freq/FileNum;
+
+data.Nfft = 424;
+data.minF = ones(size(data.AntX))*min_freq;
+c = 299792458;
+maxWr = c/(2*data.deltaF);
+res = maxWr/data.Nfft;
+data.res = res;
+x_mat = -maxWr/2:res:(maxWr/2)-res;
+
+AntAz = unwrap(atan2(data.AntY,data.AntX));
+deltaAz = abs(mean(diff(AntAz)));
+totalAz = max(AntAz) - min(AntAz);
+dx = c/(2*totalAz*mean(data.minF));
+maxWx = c/(2*deltaAz*mean(data.minF));
+y_mat = -maxWx/2:dx:(maxWx/2);
+
+[data.x_mat, data.y_mat] = meshgrid(x_mat, y_mat);
+data.z_mat = zeros(size(data.x_mat));
+
+bp = bpBasic(data);
+imagesc(x_mat, y_mat, 10*log10(abs(bp.im_final))); % Show image
+axis('xy'); % Flip axis
+colormap('jet'); % Use diffrent color mapping
+caxis(caxis + 20); % Shift color scale
+colorbar; % Show color scale
+
+% Used to generate Versal input for time domain range compressed samples
+% NOTE: Assumes FileNum = 360 for full 360 degree coverage
+%dlmwrite("gotcha_phdata_64-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 64), 1)', 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_phdata_128-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 128), 1)', 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_phdata_256-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 256), 1)', 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_phdata_512-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 512), 1)', 'delimiter', ',', 'precision', 12)
+\end{lstlisting}
+
+\clearpage
+
+% =============================================================================
 \section{Revision History}
 % =============================================================================
 \label{sec:rev_history_appendix}
@@ -11,19 +143,11 @@
 Date & Description\\
 \hline\hline
 &\\
-02/10/2025  & Created the document.\\
+10/07/2025  & Created the document.\\
 &\\
 \hline
 \end{tabular}
 \end{center}
 \end{table}
 
-\clearpage
-
-% =============================================================================
-\section{MATLAB Code}
-% =============================================================================
-\label{sec:matlab_appendix}
-
-Placeholder for MATLAB code.
 
