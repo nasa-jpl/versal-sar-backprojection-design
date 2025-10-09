@@ -40,13 +40,13 @@ the AI Engine, programmable logic, and ARM cores.
 
 The Versal architecture was used to accelerate the Gorham backprojection
 formulation. Typical acceleration methods on the Versal are expressed through
-SIMD intrinsics, multi-core instantiation, and instruction-level parallelism
-(ILP). The current implementation heavily emphasizes SIMD and multi-core
-parallelism. While some ILP optimizations were implemented, further ILP
-modifications could potentially be made and are reserved for future work (see
-Section~\ref{sec:ilp_optimizations}). Accuracy is validated by comparing focused
-images from the Versal hardware and AI Engine simulations against MATLAB
-reference outputs.
+SIMD intrinsics, multi-core instantiation, and ILP. The current implementation
+heavily emphasizes SIMD and multi-core parallelism. While some ILP
+optimizations were implemented, further ILP modifications could potentially be
+made and are reserved for future work (see
+Section~\ref{sec:ilp_optimizations}). Accuracy is validated by comparing
+focused images from the Versal hardware and AI Engine simulations against
+MATLAB reference outputs.
 
 During development, multiple custom AI Engine and PL kernel designs were
 evaluated. The finalized design includes three types of AI Engine kernels and
@@ -61,11 +61,11 @@ current design, are listed below:
     \item \textbf{Data Broadcast Kernel (1x):} Distributes slow-time radar data
         (antenna coordinates, range-to-scene center) and range-compressed
         samples to all Image Reconstruction kernels.
-    \item \textbf{Pixel Demux Kernel (1x-7x):} Assigns target pixels of interest to the 
-        Image Reconstruction kernels. In the \textit{main} branch, this kernel 
-        also performs input sorting. In \textit{host\_stride} and 
-        \textit{pl\_stride}, sorting is performed by the ARM or PL, 
-        respectively.
+    \item \textbf{Pixel Demux Kernel (1x-7x):} Assigns target pixels of
+        interest to the Image Reconstruction kernels. In the \textit{main}
+        branch, this kernel also performs input sorting. In
+        \textit{host\_stride} and \textit{pl\_stride}, sorting is performed by
+        the ARM or PL, respectively.
     \item \textbf{Image Reconstruction Kernel (1x-224x):} Implements the core 
         backprojection loop. For each pixel, it computes the differential 
         range relative to the scene center, applies phase correction, and 
@@ -75,12 +75,13 @@ current design, are listed below:
 
 \subsubsection{PL Kernels}
 \begin{itemize}
-    \item \textbf{DMA Packet Router Kernel (1x-7x):} Reorders merged AXI4-Stream 
-        outputs from the AI Engine into contiguous memory in DDR, ensuring 
-        that image pixels are correctly placed for reconstruction.
-    \item \textbf{DMA Stride Controller Kernel (1x-7x):} Reads and reorders specific 
-        data segments from DDR before streaming them into the AI Engine, 
-        offloading the input-sorting responsibility from the ARM or AI Engine.
+    \item \textbf{DMA Packet Router Kernel (1x-7x):} Reorders merged
+        AXI4-Stream outputs from the AI Engine into contiguous memory in DDR,
+        ensuring that image pixels are correctly placed for reconstruction.
+    \item \textbf{DMA Stride Controller Kernel (1x-7x):} Reads and reorders
+        specific data segments from DDR before streaming them into the AI
+        Engine, offloading the input-sorting responsibility from the ARM or AI
+        Engine.
 \end{itemize}
 
 These kernels form the building blocks of the overall processing chain. A
@@ -95,8 +96,8 @@ whole.
 \label{sec:system_overview}
 
 The design integrates the ARM Cortex-A72 processor, the AI Engine array, and
-the Programmable Logic (PL). At a high-level, the ARM Cortex-A72 is responsible
-for the following tasks:
+the PL. At a high-level, the ARM Cortex-A72 is responsible for the following
+tasks:
 
 \begin{itemize}
     \item Retrieves input data from non-volatile memory and orchestrates
@@ -114,10 +115,12 @@ for the following tasks:
     \item Performs minimal ILP through for loop pipelining.
     \item Sorts pixels into specific AI kernels (based on which branch of the
         code is being ran).
-    \item Focuses image data per pulse until the ARM processor signals an RTP signal.
+    \item Focuses image data per pulse until the ARM processor signals an RTP
+        signal.
 \end{itemize}
 
-\noindent The PL acts as a custom DMA controller and is responsible for the following tasks:
+\noindent The PL acts as a custom DMA controller and is responsible for the
+following tasks:
 
 \begin{itemize}
     \item Post-processing the data after AI Engine egress by reordering packets
@@ -126,7 +129,8 @@ for the following tasks:
         packets from DDR (based on which branch of the code is being ran).
 \end{itemize}
 
-\noindent There are three branch configurations to compare performance trade-offs:
+\noindent There are three branch configurations to compare performance
+trade-offs:
 
 \begin{itemize}
     \item \textbf{main:} The AI Engine kernels ingest unsorted data and perform 
@@ -156,24 +160,25 @@ post-processing work by the ARM processor.
   \end{center}
   \caption{System architecture for the \textit{main} and \textit{host\_stride}
       branches. The ARM loads data to DDR (unsorted in \textit{main},
-      pre-sorted in \textit{host\_stride}), which is then sent through the NoC to AI
-      Engine backprojection clusters. When the ARM determines the image is
-      sufficiently focused, it issues an RTP signal over the NoC directing the
-      clusters to emit their fully focused image data. The results are streamed
-      to the PL packet router, which reorders merged outputs and writes them
+      pre-sorted in \textit{host\_stride}), which is then sent through the NoC
+      to AI Engine backprojection clusters. When the ARM determines the image
+      is sufficiently focused, it issues an RTP signal over the NoC directing
+      the clusters to emit their fully focused image data. The results are
+      streamed to the PL packet router, which reorders merged outputs and
+      writes them
   contiguously to DDR.}
   \label{fig:default_system_arch}
 \end{figure}
 % -----------------------------------------------------------------------------
 
-As shown in Figure~\ref{fig:default_system_arch}, all data transactions between 
-compute domains traverse the Network-on-Chip (NoC). Range-compressed radar 
-pulses are delivered to the AI Engine through the NoC, and for each pulse an 
-RTP signal is also issued from the ARM to indicate whether the kernels should 
-continue cumulative summing across pulses or flush their accumulated results. 
-When a flush is triggered, the fully focused image data is emitted via 
-AXI4-Stream into the PL packet router, which reorders the merged streams and 
-writes the results contiguously to DDR.
+As shown in Figure~\ref{fig:default_system_arch}, all data transactions between
+compute domains traverse the NoC. Range-compressed radar pulses are delivered
+to the AI Engine through the NoC, and for each pulse an RTP signal is also
+issued from the ARM to indicate whether the kernels should continue cumulative
+summing across pulses or flush their accumulated results. When a flush is
+triggered, the fully focused image data is emitted via AXI4-Stream into the PL
+packet router, which reorders the merged streams and writes the results
+contiguously to DDR.
 
 \newpage
 
@@ -243,27 +248,28 @@ are described in more detail in the following sections.
 % -----------------------------------------------------------------------------
 
 Figure~\ref{fig:aie_graph} depicts a scaled-down version of the dataflow
-between the AI Engine and the PL kernels. This design comes from the \textit{main} or
-\textit{host\_stride} branches where the following configurations within
-\textit{design/common.h} were set:
+between the AI Engine and the PL kernels. This design comes from the
+\textit{main} or \textit{host\_stride} branches where the following
+configurations within \textit{design/common.h} were set:
 
 \begin{itemize}
     \item $\mathtt{PULSES} = 1$: Number of pulses to process per iteration.
     \item $\mathtt{RC\_SAMPLES} = 64$: Number of range compression samples to
         process per iteration.
     \item $\mathtt{AIE\_SWITCHES} = 2$: The number of AXI4-Stream switch
-        splitter/merger pairs. Also known as the number of backprojection
-        clusters (BP Clusters).
+        splitter/merger pairs. The compute units that contain the \gls{aie}
+        Switches, Image Reconstruction kernels, and Pixel Demux kernel are
+        known as \texttt{bpCluster}'s, as shown in Figure~\ref{fig:aie_graph}.
     \item $\mathtt{IMG\_SOLVERS\_PER\_SWITCH} = 2$: The number of Image
-        Reconstruction kernels per BP cluster.
+        Reconstruction kernels per \texttt{bpCluster}.
 \end{itemize}
 
 The maximum number of AXI4-Stream channels per packet spliter or merger is 32.
 This means up to 32 Image Reconstruction kernels can exist per packet
-spliter/merger pair (hereafter, a BP Cluster). The above diagram only depicts
-two Image Reconstruction kernels per BP Cluster. Only one Pixel Demux AI kernel
-and DMA Packet Router PL kernel can exist per BP Cluster (as depicted in
-Figure~\ref{fig:aie_graph}).
+spliter/merger pair (or \texttt{bpCluster}). The above diagram only depicts two
+Image Reconstruction kernels per \texttt{bpCluster}. Only one Pixel Demux AI
+kernel and DMA Packet Router PL kernel can exist per \texttt{bpCluster} (as
+depicted in Figure~\ref{fig:aie_graph}).
 
 
 \FloatBarrier
@@ -335,7 +341,7 @@ it performs the following steps:
 % =============================================================================
 \label{subsec:pixel_demux_kern}
 
-Only one Pixel Demux kernel is instantiated per BP Cluster, as shown in
+Only one Pixel Demux kernel is instantiated per \texttt{bpCluster}, as shown in
 Figure~\ref{fig:aie_graph}. The Pixel Demux kernel receives its data from the
 ARM processor via DDR through one GMIO port (\texttt{px\_xyz\_in}). It pushes
 its data out via one output port (\texttt{px\_xyz\_out}) that feeds into an
@@ -349,7 +355,7 @@ port descriptions for the Pixel Demuxer kernel are listed below:
         pixels of interest with respect to the target image center.
     \item \textbf{px\_xyz\_out (float):} AXI4-Stream packets that get fed to a
         AXI4-Stream packet splitter to distribute among all Image
-        Reconstruction kernels in a BP Cluster. The maximum number of
+        Reconstruction kernels in a \texttt{bpCluster}. The maximum number of
         AXI4-Stream packets that the splitter can handle, and therefore the
         maximum number of Image Reconstruction kernels, is 32.
 \end{itemize}
@@ -445,12 +451,15 @@ The following configurations within \textit{design/common.h} were set for the
     \item $\mathtt{RC\_SAMPLES} = 64$: Number of range compression samples to
         process per iteration.
     \item $\mathtt{AIE\_SWITCHES} = 1$: The number of AXI4-Stream switch
-        splitter/merger pairs. Also known as the number of backprojection
-        clusters (BP Clusters). NOTE: The design is currently only limited to
-        an \texttt{AIE\_SWITCHES} value of 1. Future work aims to increase this
-        number. See Section~\ref{subsec:pl_stride_kern} for more information.
+        splitter/merger pairs. The compute units that contain the AIE Switches,
+        Image Reconstruction kernels, and Pixel Demux kernel are known as
+        \texttt{bpCluster}'s, as shown in
+        Figure~\ref{fig:aie_graph_w_stride_ctl}. NOTE: The design is currently
+        only limited to an \texttt{AIE\_SWITCHES} value of 1. Future work aims
+        to increase this number. See Section~\ref{subsec:pl_stride_kern} for
+        more information.
     \item $\mathtt{IMG\_SOLVERS\_PER\_SWITCH} = 4$: The number of Image
-        Reconstruction kernels per BP cluster.
+        Reconstruction kernels per \texttt{bpCluster}.
 \end{itemize}
 
 \FloatBarrier
@@ -518,8 +527,8 @@ following steps within the \textit{main} branch:
         are int types by default) and place the X, Y, and Z floats into their
         own buffers on the heap of the running AI tile. It is important to read
         the \texttt{px\_xyz\_in} AXI4-Stream packet port as quickly as possible
-        since the Pixel Demux kernel wont continue distributing target
-        pixels to the other Image Reconstruction kernels in the BP cluster
+        since the Pixel Demux kernel wont continue distributing target pixels
+        to the other Image Reconstruction kernels in the \texttt{bpCluster}
         until it has fed all the target pixels into the Image Reconstruction
         kernel that it needs.
     \item \label{itm:buffer_load} Load 16 elements of X, Y, and Z into their
@@ -602,17 +611,19 @@ kernel are dispersed.
 % =============================================================================
 \label{subsec:pl_pkt_router_kern}
 
-The DMA Packet Router PL kernel is written in High-Level Synthesis (HLS), which
-allows the developer to write C/C++ and compile the code into synthesizable
-code for the FPGA. After the Image Reconstruction kernels have been executed
-\texttt{PULSES} times and they send out their focused segments of the image
-through \texttt{img\_out} AXI4-Stream packets, a PL DMA Packet Router kernel
-will receive the stream from each Image Reconstruction kernel within a BP
-cluster and stitch them together in an ordered way before placing them in DDR.
-This will allow the ARM processor to read from DDR contiguously to see the
-total focused image from each Image Reconstruction kernel contribution. See
-Figure~\ref{fig:aie_graph} for a graph depicting the dataflow using the DMA
-Packet Router PL kernel.
+The DMA Packet Router PL kernel is written in HLS, which allows
+the developer to write C/C++ and compile the code into
+synthesizable code for the FPGA. After the Image Reconstruction
+kernels have been executed \texttt{PULSES} times and they send
+out their focused segments of the image through \texttt{img\_out}
+AXI4-Stream packets, a PL DMA Packet Router kernel will receive
+the stream from each Image Reconstruction kernel within a
+\texttt{bpCluster} and stitch them together in an ordered way
+before placing them in DDR. This will allow the ARM processor to
+read from DDR contiguously to see the total focused image from
+each Image Reconstruction kernel contribution. See
+Figure~\ref{fig:aie_graph} for a graph depicting the dataflow
+using the DMA Packet Router PL kernel.
 
 \noindent The inputs and outputs for the DMA Packet Router PL kernel are listed
 below:
@@ -672,9 +683,10 @@ implications:
 
 \begin{enumerate}
     \item The Pixel Demux kernel Round-Robins 16 target pixels at a time to
-        each Image Reconstruction kernel within the BP Cluster until there are
-        no more target pixels. This is as opposed to dumping the entire set of
-        pixels destined for a specific Image Reconstruction kernel all at once.
+        each Image Reconstruction kernel within the \texttt{bpCluster} until
+        there are no more target pixels. This is as opposed to dumping the
+        entire set of pixels destined for a specific Image Reconstruction
+        kernel all at once.
     \item The Image Reconstruction kernels can start work as soon as receiving
         16 target pixels as opposed to waiting for all target pixels to be
         collected.
@@ -717,13 +729,13 @@ listed below:
         \texttt{IMG\_SOLVERS\_PER\_SWITCH} times, which is the number of Image
         Reconstruction kernels that are connected to the AXI4-Stream packet
         splitter switch. This is also the number of Image Reconstruction
-        kernels per BP Cluster.
+        kernels per \texttt{bpCluster}.
     \item \label{itm:pl_stride_outer} At this step, the target pixel array DDR
-        memory pointer is at the end of the target pixel array for a single BP
-        Cluster, so the pointer rolls back back to the beginning of the list,
-        but offset by 16 pixels. For example, on the first iteration the base
-        index pointer was 0, on the second iteration it would be 16, on the
-        third it would be 32, on the fourth it would be 48, and so on.
+        memory pointer is at the end of the target pixel array for a single
+        \texttt{bpCluster}, so the pointer rolls back back to the beginning of
+        the list, but offset by 16 pixels. For example, on the first iteration
+        the base index pointer was 0, on the second iteration it would be 16,
+        on the third it would be 32, on the fourth it would be 48, and so on.
     \item Repeat steps \ref{itm:pl_stride_inner} through
         \ref{itm:pl_stride_outer} for a total of how many multiples of 16
         pixels it takes to get through all the target pixels destined for a
@@ -732,12 +744,12 @@ listed below:
         \(\frac{\texttt{TOTAL\_TARGET\_PIXELS}}{\texttt{IMG\_SOLVERS} \times
         16}\).
     \item \label{itm:pl_stride_sw_loop} Shift the target pixel array DDR memory
-        pointer by one whole BP Cluster's worth of target pixels. This would
+        pointer by one whole \texttt{bpCluster}'s worth of target pixels. This would
         equate to shifting the target pixel pointer by
         \(\frac{\texttt{TOTAL\_TARGET\_PIXELS}}{\texttt{AIE\_SWITCHES}}\).
     \item Repeat steps \ref{itm:pl_stride_inner} through
         \ref{itm:pl_stride_sw_loop} for a total of \texttt{AIE\_SWITCHES} (i.e.
-        BP Clusters).
+        the number of \texttt{bpCluster} units).
     \item \label{itm:pl_stride_pulse_loop} Shift the target pixel array DDR
         memory pointer by one whole pulse worth of target pixels.
     \item Repeat steps \ref{itm:pl_stride_inner} through

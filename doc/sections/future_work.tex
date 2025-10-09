@@ -85,13 +85,13 @@ explicit, uniquely named stream interfaces for each connection, preventing
 parameterized array references at synthesis or link time.
 
 This limitation reduces the degree of AI Engine parallelism that can be
-utilized, since only one BP Cluster can be driven at a time. Future work should
-address this constraint by exploring one of the following paths: 
+utilized, since only one \texttt{bpCluster} can be driven at a time. Future
+work should address this constraint by exploring one of the following paths: 
 
 \begin{itemize}
     \item \textbf{Kernel Prototyping:} Create multiple kernel prototypes that
         explicitly instantiate separate \texttt{pl\_stream\_out\_N} ports for
-        each target number of BP Clusters (\texttt{AIE\_SWITCHES}).
+        each target number of \texttt{bpCluster}'s (or \texttt{AIE\_SWITCHES}).
     \item \textbf{Kernel Replication:} Redesign the DMA Stride Controller to
         operate with a single cluster output stream and instantiate multiple
         kernel instances, one per AI Engine cluster.
@@ -102,10 +102,10 @@ address this constraint by exploring one of the following paths:
 
 Expanding the DMA Stride Controller to handle multiple concurrent streams would
 enable the full utilization of the available AI Engine compute resources,
-allowing simultaneous data transfers to multiple BP Clusters and significantly
-improving throughput. Work on this front was deferred due to funding and time
-constraints but remains a key area for enhancing system scalability and
-performance when using the \textit{pl\_stride} branch.
+allowing simultaneous data transfers to multiple \texttt{bpCluster} and
+significantly improving throughput. Work on this front was deferred due to
+funding and time constraints but remains a key area for enhancing system
+scalability and performance when using the \textit{pl\_stride} branch.
 
 % =============================================================================
 \subsection{DSP Utilization}
@@ -191,33 +191,4 @@ reconstruction kernel must perform these lookups for every pulse. Future work
 should revisit this section of the algorithm to determine whether the indexing
 method can be restructured or optimized, potentially leveraging updates to the
 AI Engine API or library support in future AMD tool releases.
-
-
-%- More AIE kernels for processing:
-%    - Pixel target generation inside AIE kernels
-%    - Pixel target generation from PL to AIE
-%    - Have the STS kernel take the pixels from the host and round robin them to
-%    the AIE
-%    - Build another kernel (separate from the STS) be the arbiter to round
-%    robin to the AIE from the processor
-%- Increase number of RC\_SAMPLES and PULSES
-%    - This may be possible if we can not do ping-pong buffers but singular buffers
-%    - Also should look into utilizing memory from neighboring tiles (not sure
-%    if that is facilitated for you by the tools or you have to manually invoke
-%    that)
-%- Incorporating more ILP for further performance optimization.
-%- Implement stripmap imaging mode
-%- Utilizing FPGA/DSP
-%- All RC samples don't need to be passed to all image reconstruction kernels
-%because these kernels only need some subset of the range compressed samples.
-%This was the intention for the rtp\_rc\_idx\_offset\_in RTP value
-
-
-% NOTEEEEE!!!!! WHEN SHOWING THE PL STRIDE CONTROLLER AIE GRAPH, I NEED TO
-% MENTION THAT I NEVER SCALED UP THE PL STRIDE CONTROLLER PASSED 1 BP CLUSTER
-% BECAUSE I REALIZED THAT ALTHOUGH IT COMPUTED THE SIMILAR RESULTS AS THE
-% MAIN/HOST_STRIDE BRANCHES, IT WAS ACTUALLY SLOWER, SO DEVELOPMENT ON IT WAS
-% HALTED FOR NOW...OR RATHER...THIS IS WHERE DEVELOPMENT WAS HALTED AND WE RAN
-% OUT OF MONEY.
-
 

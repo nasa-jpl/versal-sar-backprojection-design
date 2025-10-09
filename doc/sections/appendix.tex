@@ -3,28 +3,52 @@
 % =============================================================================
 \label{sec:matlab_appendix}
 
-The MATLAB implementation is used primarily to generate and manipulate the
-phase history data serving as input to the Versal platform. Using Gorham’s SAR
-dataset and mathematical formulation~\cite{Gorham}, the MATLAB code produces
-post-processed iFFT'd time-domain data after zero-padding in the frequency
-domain to achieve the desired range resolution. This preprocessing ensures that
-the data provided to the Versal hardware accurately represents the desired
-input conditions while bypassing the need for on-chip FFT and iFFT operations.
-The MATLAB outputs are also used as a reference for verifying the accuracy of
-the AI Engine backprojection results (shown in Figure~\ref{fig:matlab_img}).
-The MATLAB code is shown below in listing~\ref{lst:matlab_code}.
+The MATLAB implementation (shown in listing~\ref{lst:matlab_code}) is used
+primarily to generate and manipulate the phase history data serving as input to
+the Versal platform. Using Gorham’s SAR dataset and mathematical
+formulation~\cite{Gorham}, 
 
-% -----------------------------------------------------------------------------
-% Generate MATLAB image from GOTACH dataset (60 degrees)
-% -----------------------------------------------------------------------------
-\begin{figure}[!hbtp]
-  \begin{center}
-    \includegraphics[width=\textwidth]{figures/MATLAB_GOTCHA_60Deg.jpg}
-  \end{center}
-  \caption{Generated MATLAB image from above code (60 degrees).}
-  \label{fig:matlab_img}
+The MATLAB implementation (shown in Listing~\ref{lst:matlab_code}) is primarily
+used to generate and manipulate the phase history data that serve as input to
+the Versal platform. Using Gorham’s SAR dataset and mathematical
+formulation~\cite{Gorham}, the MATLAB code produces post-processed iFFT'd
+time-domain data after zero-padding in the frequency domain to achieve the
+desired range resolution. The parameter \texttt{data.Nfft} controls the number
+of range-frequency samples used in this process: by default it is set to 424,
+matching the actual number of measured range samples in the dataset. Increasing
+\texttt{Nfft} beyond 424 effectively zero-pads the spectrum, resulting in finer
+range resolution when the data are transformed to the time domain via the iFFT.
+This preprocessing step ensures that the data provided to the Versal hardware
+accurately represent the intended input conditions while removing the need for
+on-chip FFT and iFFT operations. The resulting MATLAB images also serve as
+reference outputs for validating the accuracy of the AI Engine backprojection
+results (shown in Figures~\ref{fig:matlab_img_360} and~\ref{fig:matlab_img_5}).
+For example, setting \texttt{FileNum = 5} limits processing to five input
+files, corresponding to a 5° aperture around the scene center.
+
+\begin{figure}[!htb]
+  \centering
+  \begin{subfigure}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth, trim={0 20bp 0 10bp},
+    clip]{figures/MATLAB_GOTCHA_360Deg_424Nfft.jpg}
+    \caption{For 360° coverage with 424 range-compressed samples
+    (\texttt{FileNum = 360}, \texttt{data.Nfft = 424}).}
+    \label{fig:matlab_img_360}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth, trim={0 20bp 0 10bp},
+    clip]{figures/MATLAB_GOTCHA_5Deg_512Nfft.jpg}
+    \caption{For 5° coverage with 512 range-compressed samples (\texttt{FileNum
+    = 5}, \texttt{data.Nfft = 512}).}
+    \label{fig:matlab_img_5}
+  \end{subfigure}
+  \caption{Generated MATLAB images from the GOTCHA dataset at two aperture
+  extents.}
+  \label{fig:matlab_img_side_by_side}
 \end{figure}
-% -----------------------------------------------------------------------------
+
 
 \begin{lstlisting}[
   style=Matlab-editor,
@@ -80,7 +104,7 @@ min_freq = 0;
 polarization = "HH";
 
 % Number of files to process. Each file represents 1 degree (360 deg total)
-FileNum = 60;
+FileNum = 360;
 
 for n = 1:FileNum   
     str = sprintf('/mnt/disk/austin/SAR_DATA/GOTCHA-CP_Disc1/DATA/pass1/%s/data_3dsar_pass1_az%03d_%s.mat', polarization, n, polarization);
@@ -117,7 +141,7 @@ bp = bpBasic(data);
 imagesc(x_mat, y_mat, 10*log10(abs(bp.im_final))); % Show image
 axis('xy'); % Flip axis
 colormap('jet'); % Use diffrent color mapping
-caxis(caxis + 20); % Shift color scale
+caxis(caxis + 30); % Shift color scale
 colorbar; % Show color scale
 
 % Used to generate Versal input for time domain range compressed samples

@@ -26,7 +26,7 @@
 
 % Importing and manipulating graphics
 \usepackage{graphicx}
-\usepackage{subfig}
+\usepackage{subcaption}
 \usepackage{pdflscape}
 \usepackage{svg}
 
@@ -35,6 +35,12 @@
 
 % Sections
 \usepackage[section]{placeins}
+
+% Glossary
+\usepackage[acronym,automake]{glossaries-extra}
+\setabbreviationstyle[acronym]{long-short}
+\makeglossaries
+\loadglsentries{sections/glossary}
 
 % Misc packages
 \usepackage{verbatim}
@@ -192,6 +198,8 @@
 % Main Document
 % =============================================================================
 %
+\printglossary[type=\acronymtype,title=Abbreviations]
+\clearpage
 \input{sections/intro.tex}
 \clearpage
 \input{sections/versal_overview.tex}

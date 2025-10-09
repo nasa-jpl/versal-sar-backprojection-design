@@ -20,15 +20,14 @@
 \end{figure}
 % -----------------------------------------------------------------------------
 
-AI Engines are an array of very-long instruction word (VLIW) processors with
-single instruction multiple data (SIMD) vector units that are highly optimized
-for compute-intensive applications \cite{AMD_Versal_UG1079}. The AI Engine
-array supports three levels of parallelism:
+AI Engines are an array of \gls{vliw} processors with \gls{simd} vector units
+that are highly optimized for compute-intensive applications
+\cite{AMD_Versal_UG1079}. The AI Engine array supports three levels of
+parallelism:
 
 \begin{itemize}
-    \item \textbf{Instruction Level Parallelism (ILP):} Through the VLIW 
-        architecture allowing multiple operations to be executed in a single 
-        clock cycle.
+    \item \textbf{\gls{ilp}:} Through the VLIW architecture allowing multiple
+        operations to be executed in a single clock cycle.
     \item \textbf{SIMD:} Through vector registers allowing multiple elements
         to be computed in parallel.
     \item \textbf{Multicore:} Through the AI Engine array, allowing up to 400
@@ -46,18 +45,18 @@ data-transfer mechanisms. The following list gives a more complete overview:
       tiles’ memories with hardware locks for coordination, effectively
       expanding local storage~\cite{AMD_Versal_UG1079}.
   \item \textbf{Cascade ports} - Dedicated links between adjacent AI Engine
-      tiles’ multiply-accumulate (MAC) accumulators used to pass partial sums
-      or intermediate results. This path bypasses AXI4-Stream and local memory
-      for low-latency chained computations.
+      tiles’ \gls{mac} accumulators used to pass partial sums or intermediate
+      results. This path bypasses AXI4-Stream and local memory for low-latency
+      chained computations.
   \item \textbf{AXI4-Stream (tile-to-tile)} - General-purpose streaming
       interfaces inside the AI Engine array (typically 32 bits per port) with
       handshake signals (\textit{TVALID}, \textit{TREADY}, and often
       \textit{TLAST} for frame boundaries).
   \item \textbf{PLIO ports} - AXI4-Stream connections between the AI Engine
-      array and the Programmable Logic (PL); commonly 32, 64, or 128 bits wide
-      at the interface boundary.
+      array and the PL; commonly 32, 64, or 128 bits wide at the interface
+      boundary.
   \item \textbf{GMIO ports} - Interfaces that move data between external DDR
-      (via the NoC) and the AI Engine array. Support burst transfers (e.g.,
+      via the \gls{noc} and the AI Engine array. Support burst transfers (e.g.,
       64/128/256\,B).
   \item \textbf{Memory-mapped access (NoC)} - For control or lower-bandwidth
       data movement, the NoC can read/write local memories and configure DMA
@@ -108,12 +107,11 @@ preloading operands for the next iteration while writing results from the prior
 one. Developers can also guide the compiler with the
 \verb|chess_prepare_for_pipelining| directive, which prompts the AI Engine
 compiler to create an overlapped (software-pipelined)
-schedule~\cite{AMD_Versal_UG1079}. By contrast, High-Level Synthesis (HLS)
-pipeline pragmas like \texttt{\#pragma HLS PIPELINE II=1} target PL kernels and
-are not used for AI Engine kernels. These loop and buffering patterns let the
-compiler overlap loads, computation, and stores; without such structuring,
-kernels often stall on memory rather than keeping the AI Engine’s resources
-busy.
+schedule~\cite{AMD_Versal_UG1079}. By contrast, \gls{hls} pipeline pragmas like
+\texttt{\#pragma HLS PIPELINE II=1} target PL kernels and are not used for AI
+Engine kernels. These loop and buffering patterns let the compiler overlap
+loads, computation, and stores; without such structuring, kernels often stall
+on memory rather than keeping the AI Engine’s resources busy.
 
 
 \subsubsection{Buffer and Stream Interfaces}
@@ -144,18 +142,17 @@ stream iterator each cycle.
 \label{subsec:aie_graphs}
 
 An AI Engine program is organized around a dataflow graph written in C++ with
-the Adaptive Data Flow (ADF) API. This graph defines kernels, ports, and the
-connections between them (Figure~\ref{fig:aie_graph}). The ADF graph can
-interface with the programmable logic (PL), global memory, and the host
-processor using specialized ports, such as:
+the \gls{adf} API. This graph defines kernels, ports, and the connections
+between them (Figure~\ref{fig:aie_graph}). The ADF graph can interface with the
+PL, global memory, and the host processor using specialized ports, such as:
 
 \begin{itemize}
 \item \texttt{input\_plio} and \texttt{output\_plio}: AXI-stream connections to
     and from the PL.
 \item \texttt{input\_gmio} and \texttt{output\_gmio}: memory-mapped DMA
     connections to and from global memory (e.g., DDR).
-\item Runtime Parameter (RTP): passes runtime parameter data to AI Engine
-    kernels (primarily for passing single values or small arrays).
+\item \gls{rtp}: passes runtime parameter data to AI Engine kernels (primarily
+    for passing single values or small arrays).
 \end{itemize}
 
 At runtime, the Vitis toolchain manages data movement across these connections.

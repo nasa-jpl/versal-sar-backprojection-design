@@ -16,9 +16,9 @@
 \end{figure}
 % -----------------------------------------------------------------------------
 
-Synthetic Aperture Radar (SAR) is a radar imaging modality that enables
-high-resolution imagery by using antenna motion over the scene and combining
-measurements from many nearby positions along the flight path, shown in figure
+\gls{sar} is a radar imaging modality that enables high-resolution imagery by
+using antenna motion over the scene and combining measurements from many nearby
+positions along the flight path, shown in figure
 \ref{fig:sar-flight-path-geometry-data}. At centimeter wavelengths, achieving
 about ten meter resolution on the ground with a single antenna would require an
 antenna several kilometers long from orbit and still tens to a few hundred
@@ -71,18 +71,17 @@ ground and form images there rather than on board.
 \end{figure}
 % -----------------------------------------------------------------------------
 
-This paper develops an On-Board Processing (OBP) implementation of
-backprojection on a Versal Adaptive Compute Acceleration Platform (ACAP), as
-shown in figure \ref{fig:versal_arch}. The Versal ACAP is a heterogeneous
-compute environment featuring Scalar Engines (CPUs), Adaptable Engines
-(FPGA/programmable logic), and Intelligent Engines (AI and DSP cores), which
-allow developers to accelerate compute-heavy tasks \cite{AMD_Versal_WP505}. We
-design and integrate a data path from the dual Cortex-A72 processors, through
-the network-on-chip, to the AI Engines, with ping-pong buffering, DMA
-stride-controlled reordering to feed the AI Engine and Programmable Logic (PL)
-kernels efficiently. The FPGA fabric hosts the DMA reordering logic, and the AI
-Engines perform the core backprojection computations. We also provide
-simulation code for the AI Engine array and testbenches FPGA logic. The
+This paper develops an \gls{obp} implementation of backprojection on a Versal
+\gls{acap}, as shown in figure \ref{fig:versal_arch}. The Versal ACAP is a
+heterogeneous compute environment featuring Scalar Engines (CPUs), Adaptable
+Engines (FPGA/programmable logic), and Intelligent Engines (AI and DSP cores),
+which allow developers to accelerate compute-heavy tasks
+\cite{AMD_Versal_WP505}. We design and integrate a data path from the dual
+Cortex-A72 processors, through the network-on-chip, to the AI Engines, with
+ping-pong buffering, DMA stride-controlled reordering to feed the AI Engine and
+\gls{pl} kernels efficiently. The FPGA fabric hosts the DMA reordering logic,
+and the AI Engines perform the core backprojection computations. We also
+provide simulation code for the AI Engine array and testbenches FPGA logic. The
 Cortex-A72 processors orchestrate the launch of the spotlight-mode
 backprojection benchmark and record execution times. Upon completion, the AI
 Engines stream the image through the PL DMA reordering kernel to assemble a
