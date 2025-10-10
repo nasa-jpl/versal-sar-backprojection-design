@@ -4,6 +4,28 @@
 \label{sec:future_work}
 
 % =============================================================================
+\subsection{Spotlight Mode}
+% =============================================================================
+\label{sec:spotlight_mode}
+
+The current implementation of spotlight-mode backprojection on the Versal
+platform processes only a limited segment of the synthetic aperture,
+corresponding to approximately 5 degrees of azimuthal coverage around the scene
+center (roughly 602 pulses, where one degree corresponds to about 117 pulses).
+This setup provides a focused demonstration of the imaging pipeline but does
+not yet encompass the full 360-degree aperture required for complete scene
+reconstruction.
+
+Extending this implementation to full circular coverage will primarily involve
+modifications on the ARM processor side, which manages data transfers to the AI
+Engine kernels. The overall hardware architecture is expected to support
+continuous aperture processing; however, the mechanisms for sequentially
+feeding multiple data segments and handling intermediate synchronization have
+not yet been developed or validated. This functionality was deferred due to
+project time and budget constraints but remains a key next step toward
+achieving end-to-end spotlight-mode imaging on the Versal platform.
+
+% =============================================================================
 \subsection{Stripmap Mode}
 % =============================================================================
 \label{sec:stripmap_mode}
@@ -192,3 +214,27 @@ should revisit this section of the algorithm to determine whether the indexing
 method can be restructured or optimized, potentially leveraging updates to the
 AI Engine API or library support in future AMD tool releases.
 
+% =============================================================================
+\subsection{Comparison with XD100 AMD Reference Design}
+% =============================================================================
+\label{sec:xd100_comparison}
+
+In August 2025, AMD released the XD100 reference design and tutorial series for
+AI Engine development, which includes a dedicated section on backprojection for
+SAR~\cite{AMD_Versal_XD100}. Their implementation, titled
+\textit{Back-Projection for Synthetic Aperture Radar on AI Engines}, uses the
+same GOTCHA Volumetric SAR dataset employed in this work and demonstrates a
+fully realized backprojection pipeline executing on the AI Engine array. The
+tutorial showcases system-level concepts such as multi-rate scheduling, dynamic
+range management, and vectorized implementations of \texttt{sin()},
+\texttt{cos()}, and \texttt{sqrt()} using the Vitis DSP Library.
+
+This reference design was released near the conclusion of the present effort,
+after development resources had been exhausted. Although both efforts address
+the same algorithm and dataset, the two designs take different architectural
+approaches that would be valuable to analyze in greater detail. A direct
+comparison of throughput, tile utilization, and overall energy efficiency could
+provide meaningful insight into the relative performance and scalability of
+each implementation. However, such an analysis was outside the current project
+scope due to time and funding constraints and remains an important direction
+for future investigation.

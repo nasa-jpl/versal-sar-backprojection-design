@@ -146,10 +146,11 @@ colorbar; % Show color scale
 
 % Used to generate Versal input for time domain range compressed samples
 % NOTE: Assumes FileNum = 360 for full 360 degree coverage
-%dlmwrite("gotcha_phdata_64-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 64), 1)', 'delimiter', ',', 'precision', 12)
-%dlmwrite("gotcha_phdata_128-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 128), 1)', 'delimiter', ',', 'precision', 12)
-%dlmwrite("gotcha_phdata_256-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 256), 1)', 'delimiter', ',', 'precision', 12)
-%dlmwrite("gotcha_phdata_512-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 512), 1)', 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_slowtime_pass1_360deg_HH.csv", [data.AntX', data.AntY', data.AntZ', data.R0'], 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_phdata_64-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 64), 1).', 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_phdata_128-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 128), 1).', 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_phdata_256-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 256), 1).', 'delimiter', ',', 'precision', 12)
+%dlmwrite("gotcha_phdata_512-out-of-424-rc-samples_pass1_360deg_HH.csv", fftshift(ifft(data.phdata, 512), 1).', 'delimiter', ',', 'precision', 12)
 \end{lstlisting}
 
 \clearpage
