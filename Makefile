@@ -104,7 +104,7 @@ package: ${PL_BUILD_DIR}/dma_stride_controller.xo ${PL_BUILD_DIR}/dma_pkt_router
 		--package.sd_file ${PROJECT_DIR}/design/profiling_cfgs/xrt.ini \
 		--package.sd_file ${PROJECT_DIR}/${HOST_BUILD_DIR}/${HOST_EXE} \
 		--package.sd_file ${PROJECT_DIR}/design/test_data/gotcha_slowtime_pass1_360deg_HH.csv \
-		--package.sd_file ${PROJECT_DIR}/design/test_data/gotcha_$${RC_SAMPLES}-out-of-424-rc-samples_pass1_360deg_HH.csv \
+		--package.sd_file ${PROJECT_DIR}/design/test_data/gotcha_phdata_$${RC_SAMPLES}-out-of-424-rc-samples_pass1_360deg_HH.csv \
 		${PROJECT_DIR}/${XSA_BUILD_DIR}/${XSA} ${PROJECT_DIR}/${AIE_BUILD_DIR}/libadf.a
 	@echo ""
 	@echo "Packaging Complete..."

@@ -107,6 +107,9 @@ void ImgReconstruct::img_reconstruct_kern(input_buffer<float, extents<BC_ELEMENT
             z_pxls_vec.set(*reinterpret_cast<float*>(&raw_z), i);
         }
 
+        /**** CALCULATE DIFFERENTIAL RANGE FOR PIXEL SEGMENTS ****/
+        // Calculate this on host to corr pixels to rc...calc
+        // boundaries/extremes instead of the whole thing on host
         auto x_vec = aie::sub(x_ant, x_pxls_vec);
         auto x_diff_sq_acc = aie::mul_square(x_vec);
 

@@ -1,5 +1,5 @@
 % -----------------------------------------------------------------------------
-% versal_sar_backproject.txt
+% versal_sar_backproject.tex
 %
 % 2/10/2025 Austin Owens (austin.t.owens@jpl.nasa.gov)
 %
@@ -26,16 +26,29 @@
 
 % Importing and manipulating graphics
 \usepackage{graphicx}
-\usepackage{subfig}
+\usepackage{subcaption}
 \usepackage{pdflscape}
 \usepackage{svg}
+
+% Captions
+\usepackage[font=footnotesize,labelfont=bf,skip=1pt]{caption}
+
+% Sections
+\usepackage[section]{placeins}
+
+% Glossary
+\usepackage[acronym,automake]{glossaries-extra}
+\setabbreviationstyle[acronym]{long-short}
+\makeglossaries
+\loadglsentries{sections/glossary}
 
 % Misc packages
 \usepackage{verbatim}
 \usepackage{dcolumn}
 \usepackage{ifpdf}
-%\usepackage{enumerate}
+\usepackage[numbered,framed]{matlab-prettifier}
 \usepackage{enumitem}
+
 
 % PDF Bookmarks and hyperref stuff
 \usepackage[
@@ -164,7 +177,8 @@
 %
 \begin{document}
 \title{SAR Backprojection on AMD Versal ACAP}
-\author{Austin Owens (austin.t.owens@jpl.nasa.gov)}
+\author{Austin Owens (\texttt{\href{mailto:austin.t.owens@jpl.nasa.gov}{austin.t.owens@jpl.nasa.gov}}) \and
+        David Hawkins (\texttt{\href{mailto:david.w.hawkins@jpl.nasa.gov}{david.w.hawkins@jpl.nasa.gov}})}
 \date{\today}
 
 % Title page
@@ -184,6 +198,8 @@
 % Main Document
 % =============================================================================
 %
+\printglossary[type=\acronymtype,title=Abbreviations]
+\clearpage
 \input{sections/intro.tex}
 \clearpage
 \input{sections/versal_overview.tex}
@@ -194,8 +210,9 @@
 \clearpage
 \input{sections/future_work.tex}
 \clearpage
-%\input{sections/challenges.tex}
-%\clearpage
+\appendix
+\input{sections/appendix.tex}
+\clearpage
 %\input{sections/resources.tex}
 %\clearpage
 %\input{sections/ujtag.tex}
@@ -203,27 +220,6 @@
 %\input{sections/jtag_to_register.tex}
 %\clearpage
 %\input{sections/epilogue.tex}
-
-\clearpage
-\appendix
-% -----------------------------------------------------------------------------
-\section{Revision History}
-% -----------------------------------------------------------------------------
-%
-\begin{table}[h]
-%\caption{Revision History}
-\begin{center}
-\begin{tabular}{|c|p{100mm}|}
-\hline
-Date & Description\\
-\hline\hline
-&\\
-02/10/2025  & Created the document.\\
-&\\
-\hline
-\end{tabular}
-\end{center}
-\end{table}
 
 %\clearpage
 %------------------------------------------------------------------------------

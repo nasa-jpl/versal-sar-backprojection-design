@@ -240,6 +240,7 @@ The following packages were installed for documentation generation:
 - `zathura-pdf-poppler` - Plugin to add PDF support for Zathura
 - `texlive-latex-extra` - Adds .svg image support
 - `inkscape` - Graphics support
+- `texlive-science` - MATLAB syntax highlighting
 
 ## FAQ
 
