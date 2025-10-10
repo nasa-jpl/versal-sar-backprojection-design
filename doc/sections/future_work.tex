@@ -3,23 +3,238 @@
 % =============================================================================
 \label{sec:future_work}
 
-- More AIE kernels for processing:
-    - Pixel target generation inside AIE kernels
-    - Pixel target generation from PL to AIE
-    - Have the STS kernel take the pixels from the host and round robin them to
-    the AIE
-    - Build another kernel (separate from the STS) be the arbiter to round
-    robin to the AIE from the processor
-- Increase number of RC\_SAMPLES and PULSES
-    - This may be possible if we can not do ping-pong buffers but singular buffers
-    - Also should look into utilizing memory from neighboring tiles (not sure
-    if that is facilitated for you by the tools or you have to manually invoke
-    that)
-- Incorporating more ILP for further performance optimization.
-- Implement stripmap imaging mode
-- Utilizing FPGA/DSP
-- All RC samples don't need to be passed to all image reconstruction kernels
-because these kernels only need some subset of the range compressed samples.
-This was the intention for the rtp\_rc\_idx\_offset\_in RTP value
+% =============================================================================
+\subsection{Spotlight Mode}
+% =============================================================================
+\label{sec:spotlight_mode}
 
+The current implementation of spotlight-mode backprojection on the Versal
+platform processes only a limited segment of the synthetic aperture,
+corresponding to approximately 5 degrees of azimuthal coverage around the scene
+center (roughly 602 pulses, where one degree corresponds to about 117 pulses).
+This setup provides a focused demonstration of the imaging pipeline but does
+not yet encompass the full 360-degree aperture required for complete scene
+reconstruction.
 
+Extending this implementation to full circular coverage will primarily involve
+modifications on the ARM processor side, which manages data transfers to the AI
+Engine kernels. The overall hardware architecture is expected to support
+continuous aperture processing; however, the mechanisms for sequentially
+feeding multiple data segments and handling intermediate synchronization have
+not yet been developed or validated. This functionality was deferred due to
+project time and budget constraints but remains a key next step toward
+achieving end-to-end spotlight-mode imaging on the Versal platform.
+
+% =============================================================================
+\subsection{Stripmap Mode}
+% =============================================================================
+\label{sec:stripmap_mode}
+
+In spotlight mode, the antenna beam is continuously steered to focus on a fixed
+area of interest, producing high-resolution imagery over a relatively small
+footprint. In contrast, stripmap mode maintains a fixed antenna pointing
+direction and constant azimuth beamwidth as the platform moves along its flight
+path. This configuration results in a wider swath of coverage, generating
+continuous imagery along the nadir track. Implementing stripmap-mode
+backprojection on the Versal platform will require adapting the current
+architecture to handle continuous target pixel input across a dynamic scene
+geometry as the satellite (or aircraft) advances. This should be feasible with
+the current architecture; however, a new dataset that provides the appropriate
+input geometry and acquisition parameters for stripmap mode will be required.
+
+% =============================================================================
+\subsection{ILP Optimizations}
+% =============================================================================
+\label{sec:ilp_optimizations}
+
+Section~\ref{sec:overview} outlines three primary optimization mechanisms
+available on the Versal platform: ILP, SIMD, and multicore processing. The
+existing design relies heavily on SIMD and multicore parallelism, with ILP
+contributing to a smaller degree. In the current implementation, ILP
+optimizations are applied to select \texttt{for} loops within the AI Engine
+code using the \texttt{chess\_prepare\_for\_pipelining} directive, which
+enables the compiler to perform pipelining of loop iterations. Further analysis
+through profiling tools such as \textit{Vitis Analyzer} is recommended to
+better understand how these ILP optimizations affect overall performance and to
+identify additional opportunities for improvement. On the PL side, similar
+benefits can be achieved by employing HLS directives such as \texttt{\#pragma
+HLS PIPELINE} (to reduce the initiation interval), \texttt{UNROLL}, and
+\texttt{DATAFLOW}, which together enable concurrent loop iteration and task
+execution within synthesized hardware.
+
+% =============================================================================
+\subsection{DMA Stride Controller PL Kernel Improvements}
+% =============================================================================
+\label{sec:dma_strd_ctlr_pl_kern_improve}
+
+The current DMA Stride Controller PL kernel is limited to supporting a single
+output stream, with \texttt{AIE\_SWITCHES} fixed at a value of one. The
+kernel's top-level function signature, shown below, defines
+\texttt{pl\_stream\_out} as an array of AXI4-Stream interfaces:
+
+\begin{lstlisting}[
+  language=C++,
+  numbers=left,          % or right
+  numberstyle=\tiny,     % font size for numbers
+  numbersep=8pt,         % gap between numbers and code
+  stepnumber=1,          % number every line (2 = every other line)
+  firstnumber=1,         % starting number
+  xleftmargin=2em,       % add left margin so numbers don’t collide
+  framexleftmargin=2em,  % keep frame aligned if you use frame=single
+  basicstyle=\ttfamily\footnotesize,
+  caption={Function signature of the DMA Stride Controller PL kernel},
+  captionpos=b
+]
+int dma_stride_controller(
+    ap_uint<64>* ddr_mem, 
+    hls::stream<ap_axiu<128, 0, 0, 0>> pl_stream_out[AIE_SWITCHES]
+) {
+    #pragma HLS INTERFACE axis port=pl_stream_out
+    #pragma HLS INTERFACE m_axi port=ddr_mem offset=slave bundle=gmem \
+depth=PULSES*AZ_SAMPLES*RC_SAMPLES*2
+    #pragma HLS INTERFACE s_axilite port=ddr_mem bundle=control
+    #pragma HLS INTERFACE s_axilite port=return  bundle=control
+}
+\end{lstlisting}
+
+While simulation and testbench results confirm that configurations with
+\texttt{AIE\_SWITCHES > 1} can functionally operate, integration within the
+full Versal system is currently constrained by the Vitis toolchain.
+Specifically, the \texttt{system.cfg} file---used to describe PL-to-AIE
+connectivity---cannot adequately reference arrayed AXI4-Stream ports such as
+\texttt{pl\_stream\_out[AIE\_SWITCHES]}. At present, the toolchain requires
+explicit, uniquely named stream interfaces for each connection, preventing
+parameterized array references at synthesis or link time.
+
+This limitation reduces the degree of AI Engine parallelism that can be
+utilized, since only one \texttt{bpCluster} can be driven at a time. Future
+work should address this constraint by exploring one of the following paths: 
+
+\begin{itemize}
+    \item \textbf{Kernel Prototyping:} Create multiple kernel prototypes that
+        explicitly instantiate separate \texttt{pl\_stream\_out\_N} ports for
+        each target number of \texttt{bpCluster}'s (or \texttt{AIE\_SWITCHES}).
+    \item \textbf{Kernel Replication:} Redesign the DMA Stride Controller to
+        operate with a single cluster output stream and instantiate multiple
+        kernel instances, one per AI Engine cluster.
+    \item \textbf{Toolchain Integration:} Investigate updates or workarounds in
+        newer Vitis releases that support arrayed AXI4-Stream interfaces in
+        \texttt{system.cfg} connectivity specifications.
+\end{itemize}
+
+Expanding the DMA Stride Controller to handle multiple concurrent streams would
+enable the full utilization of the available AI Engine compute resources,
+allowing simultaneous data transfers to multiple \texttt{bpCluster} and
+significantly improving throughput. Work on this front was deferred due to
+funding and time constraints but remains a key area for enhancing system
+scalability and performance when using the \textit{pl\_stride} branch.
+
+% =============================================================================
+\subsection{DSP Utilization}
+% =============================================================================
+\label{sec:dsp_utilization}
+
+Future work will focus on extending the current implementation to leverage the
+Versal DSP engines for radar signal preprocessing tasks such as FFT and iFFT
+for pulse compression. Although these operations were initially implemented and
+verified within the AI Engine during early development, they were later removed
+to prioritize integrating the core components of the backprojection algorithm
+for image focusing. Since FFT and iFFT transforms are highly regular,
+arithmetic-intensive operations, they can be executed efficiently within either
+the PL or dedicated DSP blocks, freeing the AI Engine for more complex
+data-dependent computations.
+
+In this work, the MATLAB reference implementation generated post-processed,
+iFFT time-domain phase history data to serve as input to the Versal hardware.
+This allowed resolution adjustments through zero-padding in the frequency
+domain to produce input data that was compatible with the AI Engine architected
+design and eliminated the need for on-chip frequency-domain processing during
+evaluation.
+
+In a complete radar signal chain, pulse compression requiring both FFT and iFFT
+must occur on-board as part of the real-time data path. Offloading these
+transforms to the Versal DSP engines would more accurately represent
+operational radar processing and improve system-level efficiency by balancing
+the computational load across all available resources.
+
+% =============================================================================
+\subsection{AI Engine Algorithm Optimizations}
+% =============================================================================
+\label{sec:aie_algo_optimization}
+
+Several opportunities exist to further optimize the AI Engine implementation
+for higher performance and efficiency.
+
+\newcommand{\heading}[1]{%
+  \par\vspace{0.8\baselineskip}% space above
+  \noindent\textbf{#1}\par\vspace{0.45\baselineskip}% space below
+}
+
+\heading{Internal Target Pixel Generation via RTP Configuration}
+
+Currently, target pixels are sent from DDR to the AI Engine Image
+Reconstruction kernels. It would be more efficient to configure the kernels
+using RTPs to internally generate target pixels. This approach would eliminate
+the need to stream target pixel data from DDR, reducing both latency and
+bandwidth utilization.  Early in development, this method was explored but was
+later replaced with the processor-driven approach for greater flexibility. Now
+that the full system is operational, revisiting this method may yield
+significant performance improvements with potentially minor architectural
+changes.\par\medskip
+
+\heading{Selective RC Sample Distribution}
+
+At present, all range-compressed samples are broadcast to every image
+reconstruction kernel, even when only a subset is needed. A more efficient
+approach would send only the required RC segments to each kernel, freeing local
+buffer space and enabling denser placement of kernels within the AI Engine
+array.  The RC sample indices used for interpolation (as described in
+Section~\ref{subsec:img_recon_kern}, Step~\ref{itm:interp}) depend on the
+target pixels and slow-time data. To implement this optimization, the ARM
+processor could pre-compute which RC segments are required by each kernel and
+stream them selectively, potentially through the Pixel Demux kernel rather than
+the Data Broadcast kernel. Alternatively, a dedicated AI Engine kernel could
+handle RC segment distribution.  However, if the first item above is
+implemented (where target pixels are generated internally), the processor would
+no longer know which RC segments each kernel requires, increasing coordination
+complexity. The optimal implementation would depend on data accessibility and
+synchronization between the processor and AI Engine.
+
+\heading{Dynamic Buffer Indexing for Interpolation}
+
+As described in Section~\ref{subsec:img_recon_kern} (Step~\ref{itm:interp}),
+the interpolation step currently performs element-by-element access into the RC
+buffer because the required indices are dynamically generated at runtime. Since
+these indices are non-contiguous and cannot be known ahead of time, SIMD
+vectorization cannot be applied, and the kernel must fall back to a scalar loop
+for indexing. This breaks the otherwise continuous flow of vectorized
+computation and introduces a notable performance penalty, as each image
+reconstruction kernel must perform these lookups for every pulse. Future work
+should revisit this section of the algorithm to determine whether the indexing
+method can be restructured or optimized, potentially leveraging updates to the
+AI Engine API or library support in future AMD tool releases.
+
+% =============================================================================
+\subsection{Comparison with XD100 AMD Reference Design}
+% =============================================================================
+\label{sec:xd100_comparison}
+
+In August 2025, AMD released the XD100 reference design and tutorial series for
+AI Engine development, which includes a dedicated section on backprojection for
+SAR~\cite{AMD_Versal_XD100}. Their implementation, titled
+\textit{Back-Projection for Synthetic Aperture Radar on AI Engines}, uses the
+same GOTCHA Volumetric SAR dataset employed in this work and demonstrates a
+fully realized backprojection pipeline executing on the AI Engine array. The
+tutorial showcases system-level concepts such as multi-rate scheduling, dynamic
+range management, and vectorized implementations of \texttt{sin()},
+\texttt{cos()}, and \texttt{sqrt()} using the Vitis DSP Library.
+
+This reference design was released near the conclusion of the present effort,
+after development resources had been exhausted. Although both efforts address
+the same algorithm and dataset, the two designs take different architectural
+approaches that would be valuable to analyze in greater detail. A direct
+comparison of throughput, tile utilization, and overall energy efficiency could
+provide meaningful insight into the relative performance and scalability of
+each implementation. However, such an analysis was outside the current project
+scope due to time and funding constraints and remains an important direction
+for future investigation.

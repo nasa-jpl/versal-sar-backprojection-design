@@ -26,7 +26,7 @@ sudo cp -r ${PACKAGE_PATH}/sd_card/gotcha_slowtime_pass1_360deg_HH.csv ${NFS_PAT
 
 # Copy over range compression dataset file
 RC_SAMPLES=$(grep '^#define RC_SAMPLES' ${WORKSPACE_PATH}/versal-sar-backprojection-design/design/common.h | awk '{print $3}')
-sudo cp -r ${PACKAGE_PATH}/sd_card/gotcha_${RC_SAMPLES}-out-of-424-rc-samples_pass1_360deg_HH.csv ${NFS_PATH}/home/root/app/
+sudo cp -r ${PACKAGE_PATH}/sd_card/gotcha_phdata_${RC_SAMPLES}-out-of-424-rc-samples_pass1_360deg_HH.csv ${NFS_PATH}/home/root/app/
 
 # Make permissions on application and runscript executable
 sudo chmod +x ${NFS_PATH}/home/root/app/sar_backproject.elf ${NFS_PATH}/home/root/app/run_script_hw.sh

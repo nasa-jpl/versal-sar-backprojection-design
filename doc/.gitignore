@@ -7,3 +7,10 @@
 *.out
 *.synctex.gz
 *.toc
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
