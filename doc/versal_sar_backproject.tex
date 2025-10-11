@@ -69,6 +69,17 @@
 % Pretty printing code
 \usepackage{listings}
 
+% Tables
+\usepackage{booktabs}
+\usepackage{siunitx}
+\sisetup{
+  detect-weight=true,
+  detect-family=true,
+  round-mode=places,
+  round-precision=3,      % adjust displayed precision if you like
+  table-number-alignment = center
+}
+
 % Syntax highlighting
 % * Use OliveGreen for the comments to make them darker green
 \lstset{
