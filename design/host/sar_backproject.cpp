@@ -222,6 +222,8 @@ void SARBackproject::genTargetPixels() {
     // AZIMUTH RESOLUTION GRID
     double az_res = 0;
     double half_az_width = 0;
+    double delta_az;
+    double total_az;
     if (PULSES != 1) {
         double az_ant[PULSES];
         for (int i = 0; i < PULSES; i++) {
@@ -234,14 +236,26 @@ void SARBackproject::genTargetPixels() {
             sum_diff += (az_ant[i] - az_ant[i - 1]);
         }
         double mean_diff = sum_diff / (PULSES - 1);
-        double delta_az = std::fabs(mean_diff);
+        delta_az = std::fabs(mean_diff);
         double min_az = *std::min_element(az_ant, az_ant + PULSES);
         double max_az = *std::max_element(az_ant, az_ant + PULSES);
-        double total_az = max_az - min_az;
+        total_az = max_az - min_az;
         az_res = C/(2.0*total_az*MIN_FREQ);
         double az_width = C/(2.0*delta_az*MIN_FREQ);
         half_az_width = az_width/2.0;
     }
+
+    // Determine the maximum scene size of the image (m)
+    double max_wr = C/(2*RANGE_FREQ_STEP);
+    double max_wx = C/(2*delta_az*MIN_FREQ);
+
+    // Determine the resolution of the image (m)
+    double dr = C/(2*RANGE_FREQ_STEP*424);
+    double dx = C/(2*total_az*MIN_FREQ);
+
+    printf("Total Az: %.1f deg, %.4f rad\n", total_az*(180.0/PI), total_az);
+    printf("Maximum Scene Size: %.2f m range, %.2f m cross-range\n", max_wr, max_wx);
+    printf("Resolution: %.2fm range, %.2f m cross-range\n", dr, dx);
 
     // Pack each pair of 32-bit floats into one 64-bit word
     int word_idx = 0;

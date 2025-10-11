@@ -3,6 +3,156 @@
 % =============================================================================
 \label{sec:perf_metrics}
 
-This section goes over performance metrics ran on the VCK190 hardware for the
-implemented design.
+The following sections present performance, power, and architecture metrics for
+different build configurations and AIE graph architectures. All configurations
+are derived from the same stepped-frequency X-band radar dataset. The waveform
+and frequency parameters are therefore fixed across all tests and are
+summarized in Table~\ref{tab:global_radar_params}. These constants define the
+underlying radar physics, while configuration-specific parameters (e.g., number
+of pulses, range-compressed samples, and aperture size) vary per experiment and
+are reported in the subsequent subsections.
+
+\begin{table}[hbt]
+  \centering
+  \caption{Global radar characteristics (constant for all configurations).}
+  \label{tab:global_radar_params}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Physical frequency samples ($N_f$) & 424 \\
+    Frequency step ($\Delta f$) & 1.4713026 MHz \\
+    Start frequency ($f_{\min}$) & 9.2880804 GHz \\
+    Stop frequency ($f_{\max}$)  & 9.9119127 GHz \\
+    Center frequency ($f_0$)     & 9.5999966 GHz \\
+    Wavelength ($\lambda = c/f_0$) & 3.12 cm \\
+    Polarization & HH \\
+    Dataset source & GOTCHA (pass 1) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+All timing measurements are captured using \texttt{CLOCK\_MONOTONIC} on the ARM
+Cortex-A72 processor. Estimated power consumption was derived using the
+\gls{xpe} tool and actual power draw was captured from INA226 current-sense
+monitors on the VCK190 board.
+
+\newpage
+
+% =============================================================================
+\subsection{Test \#1: 425×602, 5.1° Az Coverage, \textit{main} branch}
+% =============================================================================
+\label{subsec:config1}
+
+\subsubsection*{Configuration}
+
+\begin{table}[hbt]
+  \centering
+  \caption{Configuration parameters for Test \#1.}
+  \label{tab:config1_params}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Pulses processed (\texttt{PULSES}) & 602 \\
+    Range-compressed samples (\texttt{RC\_SAMPLES}) & 512 \\
+    Total aperture angle ($\Theta$) & 0.0895 rad ($\approx$ 5.1$^{\circ}$) \\
+    \midrule
+    \textbf{Scene coverage} & 101.88 m (range) × 108.41 m (cross-range) \\
+    \textbf{Image resolution} & 0.24 m (range) × 0.18 m (cross-range) \\
+    \textbf{Resolution cells (approx.)} & 425 (range) × 602 (cross-range) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\FloatBarrier
+\subsubsection*{Performance}
+
+\begin{table}[hbt]
+  \centering
+  \caption{Segment execution times measured on ARM Cortex-A72 processor.}
+  \label{tab:perf_times}
+  \begin{tabular}{
+      l  % Segment
+      l  % Domain
+      r  % Time (ms)
+  }
+    \toprule
+    {Segment} & {Domain} & {Time (ms)} \\
+    \midrule
+    Load xclbin, instantiate AIE graph handles, and malloc memory & ARM & 1024.31         \\
+    Populating data buffers                                       & ARM & 2054203.71      \\
+    Generating target pixels                                      & ARM & 10.70           \\
+    Run AIE graphs                                                & ARM & 0.40            \\
+    Perform Backprojection                                        & AIE & \textsuperscript{*}850.53 \\
+    \midrule
+    \textbf{Total (HOST)} &  & \textbf{2055237.12} \\
+    \textbf{Total (AIE)}  &  & \textsuperscript{*}\textbf{850.53}     \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5em}
+  \begin{minipage}{0.9\linewidth}
+    \footnotesize
+    *Execution times were measured while the INA226 power-logging process was
+    running at 10~samples/s to capture transient AIE utilization. Because
+    timing was recorded on the ARM processor, these measurements can include
+    small variations from shared CPU scheduling between the timer start/stop
+    calls and the INA226 logging task. In some runs, the \textit{Perform
+    Backprojection} segment completed in as little as 759.05~ms.
+  \end{minipage}
+\end{table}
+
+\noindent\textbf{NOTE:} \textit{Populating data buffers} time segment takes
+approximately 35 minutes due to loading the slow time and range-compressed
+samples into DDR from a large CSV file. During normal operation, this data
+would be streamed in through a high-speed interface.
+
+\FloatBarrier
+\subsubsection*{Power}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/test1/ina226_power.png}
+  \caption{Measured power (W) during Test \#1 execution.}
+  \label{fig:ina226_power_test1}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/test1/ina226_current.png}
+  \caption{Measured current (mA) during Test \#1 execution.}
+  \label{fig:ina226_current_test1}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/test1/ina226_voltage.png}
+  \caption{Measured voltage (mV) during Test \#1 execution.}
+  \label{fig:ina226_voltage_test1}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/test1/xpe.png}
+  \caption{Theoretical power breakdown from XPE for Test \#1.}
+  \label{fig:xpe_test1}
+\end{figure}
+
+\FloatBarrier
+\subsubsection*{Kernel and Dataflow Architecture}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/test1/kernel_tile_layout.png}
+  \caption{Kernel placement in the AI Engine array.
+  Each \texttt{bp\_cluster} is confined to a 8x7 grid.}
+  \label{fig:kernel_tile_layout_test1}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/test1/kernel_tile_dataflow.png}
+  \caption{Kernel-to-kernel dataflow connections in AI Engine fabric.}
+  \label{fig:kernel_tile_dataflow_test1}
+\end{figure}
 
