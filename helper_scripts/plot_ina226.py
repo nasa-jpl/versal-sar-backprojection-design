@@ -9,27 +9,12 @@ Options:
   --current-unit {mA,A}      (default: mA)
   --power-unit   {uW,mW,W}   (default: uW)
   --omit "s1:e1,s2:e2,..."   (optional; relative seconds to remove)
-                              e.g., --omit 200:500
-
+                              e.g., --omit 0:100,600:1900,4000:999999  (can trim ends too)
 Example:
 ./plot_ina226.py --csv /nfs/versal/rootfs/home/root/app/rails.csv
 ./plot_ina226.py --csv /nfs/versal/rootfs/home/root/app/rails.csv --power-unit W
 ./plot_ina226.py --csv /nfs/versal/rootfs/home/root/app/rails.csv --omit 40:1950 --power-unit W
-"""
-
-#!/usr/bin/env python3
-"""
-plot_ina226.py  Plot INA226 CSV as 3 separate figures (Voltage, Current, Power)
-with BROKEN X-AXIS for any omitted spans including trimming left/right.
-
-Options:
-  --csv PATH                 (required)
-  --rails R1 R2 ...          (optional subset of rails; default all)
-  --voltage-unit {mV,V}      (default: mV)
-  --current-unit {mA,A}      (default: mA)
-  --power-unit   {uW,mW,W}   (default: uW)
-  --omit "s1:e1,s2:e2,..."   (optional; relative seconds to remove)
-                              e.g., --omit 0:100,600:1900,4000:999999  (can trim ends too)
+./plot_ina226.py --csv /nfs/versal/rootfs/home/root/app/rails.csv --omit 40:1950,2100:9999 --power-unit W
 """
 
 import argparse
