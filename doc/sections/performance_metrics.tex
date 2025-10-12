@@ -42,14 +42,14 @@ monitors on the VCK190 board.
 % =============================================================================
 \subsection{Test \#1: 425x602, 5.1° Az Coverage, \textit{main} branch}
 % =============================================================================
-\label{subsec:config1}
+\label{subsec:test1}
 
 \subsubsection*{Configuration}
 
 \begin{table}[hbt]
   \centering
   \caption{Configuration parameters for Test \#1.}
-  \label{tab:config1_params}
+  \label{tab:test1_params}
   \begin{tabular}{@{}ll@{}}
     \toprule
     \textbf{Parameter} & \textbf{Value} \\
@@ -86,7 +86,7 @@ monitors on the VCK190 board.
     aperture (\texttt{FileNum = 5}, \texttt{data.Nfft = 512}).}
     \label{fig:matlab_img_test1}
   \end{subfigure}
-  \label{fig:matlab_versal_side_by_side}
+  \label{fig:matlab_versal_side_by_side_test1}
 \end{figure}
 
 \newpage
@@ -97,7 +97,7 @@ monitors on the VCK190 board.
 \begin{table}[hbt]
   \centering
   \caption{Segment execution times measured on ARM Cortex-A72 processor.}
-  \label{tab:perf_times}
+  \label{tab:perf_times_test1}
   \begin{tabular}{
       l  % Segment
       l  % Domain
@@ -112,7 +112,7 @@ monitors on the VCK190 board.
     Run AIE graphs                                                & ARM & 0.40            \\
     Perform Backprojection                                        & AIE & \textsuperscript{*}850.53 \\
     \midrule
-    \textbf{Total (HOST)} &  & \textbf{2055237.12} \\
+    \textbf{Total (ARM)} &  & \textbf{2055237.12} \\
     \textbf{Total (AIE)}  &  & \textsuperscript{*}\textbf{850.53}     \\
     \bottomrule
   \end{tabular}
@@ -128,10 +128,10 @@ monitors on the VCK190 board.
   \end{minipage}
 \end{table}
 
-\noindent\textbf{NOTE:} \textit{Populating data buffers} time segment takes
-approximately 35 minutes due to loading the slow time and range-compressed
-samples into DDR from a large CSV file. During normal operation, this data
-would be streamed in through a high-speed interface.
+\textit{Populating data buffers} time segment takes approximately 35 minutes
+due to loading the slow time and range-compressed samples into DDR from a large
+CSV file. During normal operation, this data would be streamed in through a
+high-speed interface.
 
 \FloatBarrier
 \subsubsection*{Power}
@@ -187,5 +187,331 @@ would be streamed in through a high-speed interface.
   \includegraphics[width=\linewidth]{figures/test1/kernel_tile_dataflow.png}
   \caption{Kernel-to-kernel dataflow connections in AI Engine fabric.}
   \label{fig:kernel_tile_dataflow_test1}
+\end{figure}
+
+\newpage
+% =============================================================================
+\subsection{Test \#2: 425x723, 6.1° Az Coverage, \textit{host\_stride} branch}
+% =============================================================================
+\label{subsec:test2}
+
+\subsubsection*{Configuration}
+
+\begin{table}[hbt]
+  \centering
+  \caption{Configuration parameters for Test \#2.}
+  \label{tab:test2_params}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Pulses processed (\texttt{PULSES}) & 714 \\
+    Range-compressed samples (\texttt{RC\_SAMPLES}) & 512 \\
+    Total aperture angle ($\Theta$) & 0.1061 rad ($\approx$ 6.1$^{\circ}$) \\
+    \midrule
+    \textbf{Scene coverage} & 101.88 m (range) x 108.41 m (cross-range) \\
+    \textbf{Image resolution} & 0.24 m (range) x 0.15 m (cross-range) \\
+    \textbf{Resolution cells (approx.)} & 425 (range) x 723 (cross-range) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\FloatBarrier
+\subsubsection*{Focused Image}
+
+\begin{figure}[!htb]
+  \centering
+  \begin{subfigure}{0.58\linewidth}
+    \centering
+    \includegraphics[width=\linewidth, trim={0 20bp 0 10bp},
+    clip]{figures/test2/versal_focused_img.jpg}
+    \caption{Versal generated image of 425x723 resolution over 6.1° synthetic
+    aperture for Test \#2.}
+    \label{fig:versal_img_test2}
+  \end{subfigure}\vfill
+  \begin{subfigure}{0.58\linewidth}
+    \centering
+    \includegraphics[width=\linewidth, trim={0 20bp 0 10bp},
+    clip]{figures/test2/MATLAB_GOTCHA_6Deg_512Nfft.jpg}
+    \caption{MATLAB generated image of 425x723 resolution over 6.0° synthetic
+    aperture (\texttt{FileNum = 6}, \texttt{data.Nfft = 512}).}
+    \label{fig:matlab_img_test2}
+  \end{subfigure}
+  \label{fig:matlab_versal_side_by_side_test2}
+\end{figure}
+
+\newpage
+
+\FloatBarrier
+\subsubsection*{Performance}
+
+\begin{table}[hbt]
+  \centering
+  \caption{Segment execution times measured on ARM Cortex-A72 processor.}
+  \label{tab:perf_times_test2}
+  \begin{tabular}{
+      l  % Segment
+      l  % Domain
+      r  % Time (ms)
+  }
+    \toprule
+    {Segment} & {Domain} & {Time (ms)} \\
+    \midrule
+    Load xclbin, instantiate AIE graph handles, and malloc memory & ARM & 1069.82         \\
+    Populating data buffers                                       & ARM & 2261441.89      \\
+    Generating target pixels                                      & ARM & 30.24           \\
+    Run AIE graphs                                                & ARM & 0.40            \\
+    Perform Backprojection                                        & AIE & \textsuperscript{*}979.90 \\
+    \midrule
+    \textbf{Total (ARM)} &  & \textbf{2262542.35} \\
+    \textbf{Total (AIE)}  &  & \textsuperscript{*}\textbf{979.90}     \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5em}
+  \begin{minipage}{0.9\linewidth}
+    \footnotesize
+    *Execution times were measured while the INA226 power-logging process was
+    running at 10~samples/s to capture transient AIE utilization. Because
+    timing was recorded on the ARM processor, these measurements can include
+    small variations from shared CPU scheduling between the timer start/stop
+    calls and the INA226 logging task. In some runs, the \textit{Perform
+    Backprojection} segment completed in as little as 901.38~ms.
+  \end{minipage}
+\end{table}
+
+Because the ARM processor takes care of the pre-sorting for the AI Engine in
+the \textit{host\_stride} branch, the \textit{Generating target pixels} takes
+rougly 20ms longer to complete. Additionally, \textit{Populating data buffers}
+time segment takes approximately 37 minutes due to loading the slow time and
+range-compressed samples into DDR from a large CSV file. During normal
+operation, this data would be streamed in through a high-speed interface.
+
+
+\FloatBarrier
+\subsubsection*{Power}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.89\linewidth]{figures/test2/ina226_power.png}
+  \caption{Measured power (W) during Test \#2 execution.}
+  \label{fig:ina226_power_test2}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.89\linewidth]{figures/test2/ina226_current.png}
+  \caption{Measured current (mA) during Test \#2 execution.}
+  \label{fig:ina226_current_test2}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.89\linewidth]{figures/test2/ina226_voltage.png}
+  \caption{Measured voltage (mV) during Test \#2 execution.}
+  \label{fig:ina226_voltage_test2}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test2/xpe.png}
+  \caption{Theoretical power breakdown from XPE for Test \#2.}
+  \label{fig:xpe_test2}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test2/xpe_graphs.png}
+  \caption{Theoretical power and static current from XPE for Test \#2.}
+  \label{fig:xpe_graph_test2}
+\end{figure}
+
+\FloatBarrier
+\subsubsection*{Kernel and Dataflow Architecture}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test2/kernel_tile_layout.png}
+  \caption{Kernel placement in the AI Engine array.
+  Each \texttt{bp\_cluster} is confined to a 8x7 grid.}
+  \label{fig:kernel_tile_layout_test2}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test2/kernel_tile_dataflow.png}
+  \caption{Kernel-to-kernel dataflow connections in AI Engine fabric.}
+  \label{fig:kernel_tile_dataflow_test2}
+\end{figure}
+
+\newpage
+% =============================================================================
+\subsection{Test \#3: 425x99, 0.8° Az Coverage, \textit{pl\_stride} branch}
+% =============================================================================
+\label{subsec:test3}
+
+Recall that the \textit{pl\_stride} branch currnelyt only works with an
+\texttt{AIE\_SWITCHES} value of 1, therefore less data can be processesd at any
+given time. Future work aims to increase this number (see
+Section~\ref{sec:dma_strd_ctlr_pl_kern_improve} for more information).
+
+\subsubsection*{Configuration}
+
+\begin{table}[hbt]
+  \centering
+  \caption{Configuration parameters for Test \#3.}
+  \label{tab:test3_params}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Pulses processed (\texttt{PULSES}) & 100 \\
+    Range-compressed samples (\texttt{RC\_SAMPLES}) & 512 \\
+    Total aperture angle ($\Theta$) & 0.0147 rad ($\approx$ 0.8$^{\circ}$) \\
+    \midrule
+    \textbf{Scene coverage} & 101.88 m (range) x 108.41 m (cross-range) \\
+    \textbf{Image resolution} & 0.24 m (range) x 1.10 m (cross-range) \\
+    \textbf{Resolution cells (approx.)} & 425 (range) x 99 (cross-range) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\FloatBarrier
+\subsubsection*{Focused Image}
+
+\begin{figure}[!htb]
+  \centering
+  \begin{subfigure}{0.52\linewidth}
+    \centering
+    \includegraphics[width=\linewidth, trim={0 20bp 0 10bp},
+    clip]{figures/test3/versal_focused_img.jpg}
+    \caption{Versal generated image of 425x99 resolution over 0.8° synthetic
+    aperture for Test \#3.}
+    \label{fig:versal_img_test3}
+  \end{subfigure}\vfill
+  \begin{subfigure}{0.52\linewidth}
+    \centering
+    \includegraphics[width=\linewidth, trim={0 20bp 0 10bp},
+    clip]{figures/test3/MATLAB_GOTCHA_1Deg_512Nfft.jpg}
+    \caption{MATLAB generated image of 425x117 resolution over 1.0° synthetic
+    aperture (\texttt{FileNum = 1}, \texttt{data.Nfft = 512}).}
+    \label{fig:matlab_img_test3}
+  \end{subfigure}
+  \label{fig:matlab_versal_side_by_side_test3}
+\end{figure}
+
+\newpage
+
+\FloatBarrier
+\subsubsection*{Performance}
+
+\begin{table}[hbt]
+  \centering
+  \caption{Segment execution times measured on ARM Cortex-A72 processor.}
+  \label{tab:perf_times_test3}
+  \begin{tabular}{
+      l  % Segment
+      l  % Domain
+      r  % Time (ms)
+  }
+    \toprule
+    {Segment} & {Domain} & {Time (ms)} \\
+    \midrule
+    Load xclbin, instantiate AIE graph handles, and malloc memory & ARM & 539.87    \\
+    Populating data buffers                                       & ARM & 353081.47 \\
+    Generating target pixels                                      & ARM & 301.64    \\
+    Run AIE graphs                                                & ARM & 0.17      \\
+    Perform Backprojection                                        & AIE & 129.95    \\
+    \midrule
+    \textbf{Total (ARM)} &  & \textbf{353923.15} \\
+    \textbf{Total (AIE)}  &  & \textbf{129.95} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textit{Populating data buffers} time segment takes approximately 6 minutes due
+to loading the slow time and range-compressed samples into DDR from a large CSV
+file. During normal operation, this data would be streamed in through a
+high-speed interface.
+
+\FloatBarrier
+\subsubsection*{Power}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/test3/ina226_power.png}
+  \caption{Measured power (W) during Test \#3 execution.}
+  \label{fig:ina226_power_test3}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/test3/ina226_current.png}
+  \caption{Measured current (mA) during Test \#3 execution.}
+  \label{fig:ina226_current_test3}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/test3/ina226_voltage.png}
+  \caption{Measured voltage (mV) during Test \#3 execution.}
+  \label{fig:ina226_voltage_test3}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test3/xpe.png}
+  \caption{Theoretical power breakdown from XPE for Test \#3.}
+  \label{fig:xpe_test3}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test3/xpe_graphs.png}
+  \caption{Theoretical power and static current from XPE for Test \#3.}
+  \label{fig:xpe_graph_test3}
+\end{figure}
+
+\FloatBarrier
+\suppressfloats[t]
+
+\subsubsection*{Kernel and Dataflow Architecture}
+
+% TOP HALF OF IMAGE
+\begin{figure}[!ht]
+  \centering
+  \begin{adjustbox}{max totalsize={\textwidth}{0.72\textheight},
+                    clip,trim=0 {.5\height} 0 0}
+    \includegraphics{figures/test3/pl_stride_32_img_recon_kern.png}
+  \end{adjustbox}
+  \captionsetup{aboveskip=6pt,belowskip=6pt,font=footnotesize}
+  \caption{AI Engine graph of 32 Image Reconstruction kernels within a single \textit{bp\_cluster}. (top)}
+  \label{fig:aie_graph_test3}
+\end{figure}
+
+\clearpage
+
+% BOTTOM HALF OF IMAGE
+\begin{figure}[p]\ContinuedFloat
+  \centering
+  \begin{adjustbox}{max totalsize={\textwidth}{0.85\textheight},
+                    clip,trim=0 0 0 {.5\height}}
+    \includegraphics{figures/test3/pl_stride_32_img_recon_kern.png}
+  \end{adjustbox}
+  \caption{(continued)}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test3/kernel_tile_layout.png}
+  \caption{Kernel placement in the AI Engine array.
+  Each \texttt{bp\_cluster} is confined to a 8x7 grid.}
+  \label{fig:kernel_tile_layout_test3}
+\end{figure}
+
+\begin{figure}[hbt]
+  \centering
+  \includegraphics[width=\linewidth]{figures/test3/kernel_tile_dataflow.png}
+  \caption{Kernel-to-kernel dataflow connections in AI Engine fabric.}
+  \label{fig:kernel_tile_dataflow_test3}
 \end{figure}
 
