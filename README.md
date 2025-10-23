@@ -3,7 +3,7 @@
 ## Introduction
 
 **NOTE: This repository should not be cloned directly! Instead, follow the instructions in the 
-[versal-manifest](https://github.jpl.nasa.gov/atowens/versal-manifest) repo to collect all the 
+[versal-manifest](https://github.com/nasa-jpl/versal-manifest) repo to collect all the 
 necessary repos required for building this design.**
 
 This repo contains the source code for implementing backprojection onto 
@@ -53,7 +53,7 @@ The various helper scripts in `versal-sar-backprojection-design` repo are summar
 ## Building the Project
 
 After fetching the required dependencies for this design (as shown in the 
-[versal-manifest](https://github.jpl.nasa.gov/atowens/versal-manifest) repo), the different components of the design 
+[versal-manifest](https://github.com/nasa-jpl/versal-manifest) repo), the different components of the design 
 can be built with the below instructions.
 
 ### Yocto Build
@@ -61,7 +61,7 @@ can be built with the below instructions.
 From your workspace root directory:
 
 ```bash
-cd versal-sar-backprojection-design
+cd versal-yocto-build
 docker build --build-arg USERNAME=<user_name> --build-arg UID="$(id -u)" -t yocto-img .
 ./docker.run -u <user_name> -s $(pwd)/workspace -i yocto-img /bin/bash
 
@@ -226,9 +226,9 @@ The above network settings should match the network settings within your customi
 ## Branches
 
 There are 3 seperate branches for the design:
-- [main](https://github.jpl.nasa.gov/atowens/versal-sar-backprojection-design/tree/main)
-- [host_stride](https://github.jpl.nasa.gov/atowens/versal-sar-backprojection-design/tree/host_stride)
-- [pl_stride](https://github.jpl.nasa.gov/atowens/versal-sar-backprojection-design/tree/pl_stride)
+- [main](https://github.com/nasa-jpl/versal-sar-backprojection-design/tree/main)
+- [host_stride](https://github.com/nasa-jpl/versal-sar-backprojection-design/tree/host_stride)
+- [pl_stride](https://github.com/nasa-jpl/versal-sar-backprojection-design/tree/pl_stride)
 
 The features of these branches are further discussed in [doc/versal_sar_backproject.pdf](doc/versal_sar_backproject.pdf).
 
@@ -250,7 +250,7 @@ In order to promote better version control practices, dependency management,
 and extensibility, different elements of building out designs for the Versal
 ACAP are stored in their own repositories. For example, All the repos necessary
 for building the Linux OS running on the ARM of the Versal are pulled out into
-their own repository (see the [versal-manifest](https://github.jpl.nasa.gov/atowens/versal-manifest)
+their own repository (see the [versal-manifest](https://github.com/nasa-jpl/versal-manifest)
 repo to see other repo dependancies needed to build/flash this design to a Versal).
 This allows for easier management and upgrades to various elements of Versal projects
 since only one repository needs to be updated for all Versal designs to get those features.
