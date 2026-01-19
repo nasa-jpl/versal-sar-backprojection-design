@@ -17,7 +17,7 @@ Directory                     | Contents
 design/aie                    | Source code for AIE engine on Versal
 design/exec_scripts           | Scripts that gets transferred to Versal ARM to execute the design
 design/host                   | Source code for the ARM Cortex-A72 on Versal
-design/pl                     | Source code for the FPGA on Versal (currently not being used)
+design/pl                     | Source code for the FPGA on Versal
 design/profiling_cfgs         | Config that gets transferred to Versal ARM describing various setting of how the design should be ran
 design/system_cfgs            | Provides information to compiler when compiling the entire design
 design/test_data              | Test data for slowtime and range compression samples
